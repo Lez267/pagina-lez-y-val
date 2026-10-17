@@ -1,15 +1,47 @@
 {
   "name": "nuestra-historia",
-  "private": true,
   "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build && node scripts/generate-sw.mjs",
-    "preview": "vite preview --host 127.0.0.1",
-    "test": "node --import tsx --test tests/*.test.ts"
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
   },
-  "dependencies": { "react": "^19.2.0", "react-dom": "^19.2.0", "lucide-react": "^0.468.0", "firebase": "^12.4.0" },
-  "devDependencies": { "vite": "^7.1.9", "typescript": "^5.9.3", "@types/react": "^19.2.2", "@types/react-dom": "^19.2.2", "tsx": "^4.20.6" },
-  "overrides": { "@grpc/grpc-js": "1.13.6" }
+  "scripts": {
+    "install:ci": "node scripts/install-ci.mjs",
+    "dev": "node scripts/run-framework.mjs dev",
+    "build": "tsc --noEmit && node scripts/run-framework.mjs build && node scripts/generate-sw.mjs",
+    "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
+    "test": "node --import tsx --test tests/*.test.ts src/lib/gallery.test.ts server/security.test.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^1.31.0",
+    "next": "16.3.8",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "firebase": "^12.4.0",
+    "clsx": "2.1.1",
+    "tailwind-merge": "3.6.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/workers-types": "4.20260515.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.26",
+    "json-rpc-2.0": "1.7.1",
+    "raw-body": "3.0.2",
+    "react-server-dom-webpack": "19.2.6",
+    "typescript": "5.9.3",
+    "vinext": "1.0.0-beta.5",
+    "vite": "8.0.13",
+    "wrangler": "4.92.0",
+    "tsx": "^4.20.6"
+  },
+  "type": "module",
+  "overrides": {
+    "sharp": "0.35.5",
+    "@grpc/grpc-js": "1.13.6"
+  }
 }

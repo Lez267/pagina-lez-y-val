@@ -55,6 +55,15 @@ test('all imported records survive, including text-only and malformed records', 
   assert.throws(() => normalizeImport({ unexpected: [] }), /lista de recuerdos/);
 });
 
+test('publication time stays distinct from the day the photograph was taken', () => {
+  const result = normalizeMemory('history', { photoDate: '2024-04-17', createdAt: { seconds: Date.parse('2026-10-17T10:00:00Z') / 1000, nanoseconds: 0 }, reminder: { enabled: true, date: '2026-11-01', label: 'Una fecha nuestra', repeat: 'yearly' } });
+  assert.equal(result.date, '2024-04-17');
+  assert.equal(result.createdAt, '2026-10-17T10:00:00.000Z');
+  assert.equal(result.reminder?.repeat, 'yearly');
+  assert.equal(normalizeMemory('bad-time', { createdAt: 'not a date', reminder: { enabled: true, date: '2026-02-30', repeat: 'yearly' } }).createdAt, undefined);
+  assert.equal(normalizeMemory('bad-reminder', { reminder: { enabled: true, date: '2026-02-30', repeat: 'yearly' } }).reminder, undefined);
+});
+
 test('normalization never mutates input records or nested arrays', () => {
   const original = { id: 'frozen', description: 'Texto', photoDate: '2026-04-17', media: [{ url: 'https://example.com/a.jpg', type: 'image' }], tags: [' juntos ', 'juntos'], favorites: ['Ale'] };
   const before = structuredClone(original);
@@ -63,4 +72,14 @@ test('normalization never mutates input records or nested arrays', () => {
   assert.deepEqual(original, before);
   assert.deepEqual(result[0].tags, ['juntos']);
   assert.notStrictEqual(result[0].media, original.media);
+});
+
+test('new stable media IDs survive reload while duplicate IDs receive a fallback', () => {
+  const result = normalizeMemory('post', { media: [
+    { id: 'stable-photo', url: 'https://example.com/one.jpg' },
+    { id: 'stable-photo', url: 'https://example.com/two.jpg' },
+  ], coverMediaId: 'stable-photo' });
+  assert.equal(result.media[0].id, 'stable-photo');
+  assert.notEqual(result.media[1].id, 'stable-photo');
+  assert.equal(result.coverMediaId, 'stable-photo');
 });

@@ -1,10 +1,10 @@
-// Public Firebase web configuration copied from the existing gallery.
-// Access is enforced by Firebase Authentication and server-side Security Rules.
+// Public web configuration of the independent Firebase copy.
+// The original gallery continues to use its own project and deployment.
 export const firebaseConfig = {
-  "apiKey": "AIzaSyAaRdMWXS6btTI0cS0My9awsmRiyJcAMDw",
-  "authDomain": "galeria-lezz-y-val.firebaseapp.com",
-  "projectId": "galeria-lezz-y-val",
-  "storageBucket": "galeria-lezz-y-val.firebasestorage.app",
-  "messagingSenderId": "284073570271",
-  "appId": "1:284073570271:web:e4780311111304c7525e6a"
+  "apiKey": "AIzaSyACEBXNXb_0WzNbWGYApVkfzdZairIlbmo",
+  "authDomain": "lezz-val-universo.firebaseapp.com",
+  "projectId": "lezz-val-universo",
+  "storageBucket": "lezz-val-universo.firebasestorage.app",
+  "messagingSenderId": "305051757170",
+  "appId": "1:305051757170:web:12e887757f70648916f0eb"
 } as const;

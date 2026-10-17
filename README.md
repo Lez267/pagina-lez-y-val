@@ -1,55 +1,56 @@
 # Nuestro pequeño universo · Ale & Val
 
-Primera versión independiente: React, TypeScript y Vite. Diseño floral adaptable a móvil, galería, línea del tiempo, cartas, canciones con dedicatorias, planes, rompecabezas y diamantitos.
+Jardín floral con React, TypeScript y Vinext sobre Workers. La galería anterior y su despliegue Vercel siguen independientes.
 
-## Conservación de recuerdos
+## Datos y conservación
 
-- Los proyectos originales no se han modificado. Esta carpeta es independiente.
-- El adaptador Firebase sólo puede autenticar y leer `memories`. No importa operaciones de escritura, modificación, subida ni borrado.
-- No incluye credenciales administrativas, firmas Cloudinary ni scripts de restauración.
-- Los formatos antiguos `url` y actuales `media[]` se normalizan en memoria, conservando documentos incluso sin foto.
-- Abrir un JSON consulta su contenido en el navegador. Nunca lo restaura ni lo envía a Firebase.
-- El service worker guarda la interfaz y fotografías públicas de ejemplo. No almacena documentos Firebase, fotos remotas ni respaldos importados.
+La nueva aplicación se conecta exclusivamente a **lezz-val-universo**. Se copiaron y verificaron 16 publicaciones, sus campos originales y 189 URLs distintas de Cloudinary; las tres identidades Google conservaron sus UID. Las dos suscripciones push antiguas quedaron en el respaldo y no se reutilizan. La copia corresponde a un momento concreto: las publicaciones posteriores de ambas webs no se replican entre proyectos.
 
-## Lo disponible
+Los proyectos originales no se editan desde esta carpeta. Las reglas nuevas niegan todas las eliminaciones y la aplicación no incluye operaciones para borrar publicaciones o archivos. La edición actual cambia detalles, portada, recordatorios y favoritos; conserva los medios y campos desconocidos del documento original.
 
-- Inicio floral y contador por fechas de calendario en America/Mexico_City.
-- Recuerdos por búsqueda, colección, tipo y favoritos locales; visor de múltiples fotos/videos.
-- Línea del tiempo automática por fecha del recuerdo, incluyendo registros sin fecha.
-- Cartas y sobres con editor, lectura, filtros y exportación JSON.
-- Canciones dedicadas con enlaces Spotify validados. No reproduce ni sincroniza audio Spotify con juegos.
-- Planes y sueños con categorías, fechas y estado vivido/pendiente.
-- Rompecabezas 3×3/4×4: intercambio por toque o teclado, pistas, deshacer y progreso.
-- Diamantitos Canvas: 24×32, paleta de hasta 20 colores, zoom, pintar, deshacer y progreso.
+Las nuevas fotos y videos usan un identificador aleatorio bajo `nuestro-universo/`, con `overwrite=false`. El preset de subida antiguo sigue aparte. La firma se prepara en el servidor después de verificar la firma RS256 del token Firebase, su proyecto, proveedor Google, correo verificado y UID autorizado. El secreto Cloudinary nunca se entrega al cliente. El API Key de Cloudinary forma parte del formulario firmado que exige su API; el API Secret permanece en el servidor.
+
+Límites del formulario: 20 archivos, 20 MB por imagen, 100 MB por video y 250 MB por publicación. El servidor verifica el tamaño **declarado** y firma formatos permitidos; esa firma no certifica el número de bytes del archivo real. Se aplican también los límites de la cuenta Cloudinary.
+
+Los respaldos privados de Firestore/Auth y las credenciales están fuera de esta carpeta y del repositorio. No ejecutar restauraciones ni utilidades de limpieza contra el proyecto original. El motor de copia conserva los valores Firestore originales; la normalización visual de esta web no sirve para restaurar datos.
+
+## Funciones
+
+- Galería con búsqueda, etiquetas, colecciones, favoritos compartidos, visor de fotos/videos y navegación entre archivos/publicaciones.
+- Publicación de nuevos recuerdos mediante subidas firmadas; edición conservadora de sus detalles y portada.
+- Historias de publicaciones recientes, recuerdos de este día, aniversarios y recordatorios en pantalla. Las historias dejan de mostrarse por fecha, sin borrar su publicación.
+- Línea del tiempo basada en la fecha de los recuerdos.
+- Cartas, canciones/dedicatorias y planes compartidos mediante Google, con actualizaciones entre dispositivos. Los borradores locales anteriores permanecen en su almacenamiento y se comparten únicamente al confirmarlo.
+- Guardado local opcional y exportación JSON de cartas, canciones y planes. Los ejemplos y respaldos abiertos conservan su espacio local separado.
+- Enlaces validados a canciones, playlists y álbumes Spotify. No hay conexión OAuth con la cuenta Spotify, reproducción sincronizada ni importación de su biblioteca.
+- Rompecabezas 3×3/4×4 y diamantitos Canvas con progreso local.
 - Regalo de Valeria enlazado a su dirección original.
-- Manifiesto, iconos y caché estática para PWA. No pide permisos de notificaciones.
+- PWA con manifiesto, iconos y caché de interfaz/imágenes de ejemplo; sin caché de documentos Firebase, fotos remotas ni API de firmas.
 
-## Límites de esta primera versión
+La interfaz inicial identifica sus imágenes de ejemplo. Al abrir Google se utiliza la galería independiente; abrir un JSON sólo consulta el archivo en ese navegador, sin enviarlo ni restaurarlo en Firebase.
 
-Cartas, canciones, planes, favoritos y partidas se guardan **sólo en el navegador/dispositivo**. No se comparten todavía entre ustedes ni entre dispositivos. Cada cuenta y cada respaldo tienen un espacio separado; exportar JSON conserva una copia de cartas, canciones y planes. No limpiar los datos del navegador sin exportar lo que se quiera conservar.
+## Alcance pendiente
 
-La vista inicial utiliza contenido de ejemplo, identificado en pantalla. Las imágenes de ejemplo son públicas de Unsplash; referencias en `public/images/credits.json`. No son sus fotografías personales.
+Esta revisión no declara paridad completa con todas las funciones históricas: no incluye notificaciones push, exportación ZIP de todos los archivos ni añadir/sustituir medios dentro de una publicación existente. Los recordatorios actuales se consultan dentro de la web. Los enlaces Cloudinary conservan sus permisos de entrega originales; el acceso privado de la web no cambia por sí mismo la privacidad de esos enlaces.
 
-La conexión Google consulta el proyecto Firebase existente. Para utilizarla desde un dominio nuevo, ese hostname debe figurar en **Firebase Console → Authentication → Settings → Authorized domains**, y la cuenta debe estar autorizada por sus reglas actuales. La web ofrece errores claros si falta esa configuración. No se cambiaron los dominios ni las reglas durante este desarrollo. No se realizó acceso autenticado a sus fotos durante las pruebas.
+No se crean publicaciones o archivos de prueba en producción. La primera subida real y la instalación PWA en sus teléfonos requieren comprobarse con ustedes.
 
-Al abrir un respaldo, las URLs remotas sólo funcionan si el archivo sigue disponible y sus permisos permiten acceso. CORS puede impedir convertir ciertas imágenes remotas en diamantitos; el juego permite elegir una foto del dispositivo, procesada localmente y sin subirla.
+## Desarrollo
 
-## Ejecutar y verificar
+Requiere Node 22.13 o posterior.
 
 ```sh
 npm ci
 npm run dev
 npm test
 npm run build
-npm run preview
+npm start
 ```
 
-`npm run build` comprueba TypeScript y genera `dist/`, incluido el service worker con revisión de caché basada en los archivos construidos. El adaptador Firebase se descarga en un chunk aparte cuando se solicita la conexión.
+El desarrollo sirve el puerto 5173. `npm start` utiliza el Worker compilado de `dist/server/wrangler.json`. La publicación se prepara con los helpers Sites, conservando `.openai/hosting.json` y el ID del sitio existente; no es un despliegue estático Vite ni debe apuntar al repositorio original.
 
-El override exacto `@grpc/grpc-js: 1.13.6` resuelve los avisos de la dependencia Node transitiva de Firebase. El bundle de navegador de Firestore no utiliza servidor gRPC. Lock instalado, compilación y pruebas se verificaron; auditoría npm: cero vulnerabilidades conocidas en el momento del desarrollo.
+Variables de servidor: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` y `FIREBASE_ALLOWED_UIDS`. En Sites se guardan como secretos de ejecución. No usar prefijos públicos, no incluirlas en el manifiesto ni versionar archivos privados. La configuración web de Firebase es pública; las reglas y la autenticación controlan sus permisos.
 
-Las pruebas cubren normalización sin mutación de entrada, medios antiguos/múltiples, fechas inválidas, URLs peligrosas, puzzle y cuantización, separación de respaldos y límites de lectura/caché. La revisión visual se hizo con navegador de escritorio y viewport de 390 px. El acceso privado real de Firebase y la instalación PWA en sus teléfonos requieren verificación posterior con ustedes.
+Next 16.3.8 y el override Sharp 0.35.5 corrigen los avisos detectados en las dependencias del servidor. La auditoría de dependencias de producción dio cero avisos conocidos durante esta revisión; esto no sustituye las pruebas de autorización y conservación de datos.
 
-## Publicación independiente
-
-`.openai/hosting.json` identifica la vista privada creada con Sites. No apunta al repositorio GitHub original ni modifica su despliegue Vercel. Para desplegar en Vercel desde otra carpeta/repositorio, usar build `npm run build`, salida `dist` y conservar la configuración Firebase existente. No incluir claves de servicio ni respaldos privados en el repositorio.
+Las pruebas cubren normalización, enlaces peligrosos, fechas, juegos, aislamiento de proyectos, preservación de medios, edición parcial, favoritos propios, firma de subidas, tokens adulterados, límites HTTP, idempotencia y conservación de borradores. Las reglas se prueban adicionalmente con Firestore Emulator fuera del sitio, incluyendo copias privadas en memoria de los 16 documentos originales.

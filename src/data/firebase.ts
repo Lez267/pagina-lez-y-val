@@ -1,6 +1,6 @@
 import { getApps, initializeApp } from 'firebase/app';
 import { browserSessionPersistence, getAuth, GoogleAuthProvider, setPersistence, signInWithPopup, signOut, type Auth } from 'firebase/auth';
-import { collection, getDocs, getFirestore } from 'firebase/firestore';
+import { collection, getDocs, getFirestore, onSnapshot } from 'firebase/firestore';
 import { firebaseConfig } from './firebase-config';
 import { normalizeMemory } from './normalizer';
 import type { GallerySession } from './types';
@@ -19,12 +19,38 @@ function queueSignOut(auth: Auth, stillRelevant: () => boolean = () => true): Pr
 }
 
 function getGalleryAuth(): Auth {
+  if (firebaseConfig.projectId !== 'lezz-val-universo') throw new Error('La conexión requiere el proyecto independiente verificado.');
   if (!galleryAuth) {
-    const name = 'nuestra-historia-gallery-readonly';
+    const name = `nuestra-historia-gallery-${firebaseConfig.projectId}`;
     const app = getApps().find(item => item.name === name) ?? initializeApp(firebaseConfig, name);
+    if (app.options.projectId !== 'lezz-val-universo') throw new Error('La sesión no pertenece al proyecto independiente.');
     galleryAuth = getAuth(app);
   }
   return galleryAuth;
+}
+
+/** The only client context available to optional write services is the new project. */
+export function requireConnectedGallery() {
+  const auth = getGalleryAuth();
+  const user = auth.currentUser;
+  if (!user || auth.app.options.projectId !== 'lezz-val-universo') throw new Error('Primero abre la galería con Google.');
+  return { auth, db: getFirestore(auth.app), user };
+}
+
+export async function readCurrentMemories() {
+  const { auth, db, user } = requireConnectedGallery();
+  const snapshot = await getDocs(collection(db, 'memories'));
+  if (auth.currentUser?.uid !== user.uid) throw new Error('La sesión cambió mientras se leían los recuerdos.');
+  return snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase'))
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export function watchCurrentMemories(onMemories: (memories: GallerySession['memories']) => void, onError: () => void) {
+  const { auth, db, user } = requireConnectedGallery();
+  return onSnapshot(collection(db, 'memories'), snapshot => {
+    if (auth.currentUser?.uid !== user.uid) return;
+    onMemories(snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase')).sort((a, b) => b.date.localeCompare(a.date)));
+  }, () => { if (auth.currentUser?.uid === user.uid) onError(); });
 }
 
 function friendlyError(error: unknown): Error {
@@ -51,7 +77,7 @@ function friendlyError(error: unknown): Error {
   }
 }
 
-/** Call from a deliberate user click. Reads the existing gallery; never writes it. */
+/** Call from a deliberate user click. Reads the independent copy; never writes it. */
 export function connectGallery(): Promise<GallerySession> {
   if (pendingConnection) return pendingConnection;
   const epoch = ++connectionEpoch;

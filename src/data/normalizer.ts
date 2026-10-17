@@ -39,6 +39,17 @@ function timestampDate(value: unknown): string {
   return Number.isFinite(date.getTime()) ? calendarDate(date.toISOString()) : '';
 }
 
+function publicationTimestamp(value: unknown): string | undefined {
+  const record = asRecord(value);
+  const seconds = record.seconds ?? record._seconds;
+  const millis = value instanceof Date ? value.getTime()
+    : typeof value === 'string' && calendarDate(value) ? Date.parse(value)
+    : typeof seconds === 'number' && Number.isFinite(seconds) ? seconds * 1000 : NaN;
+  const date = new Date(millis);
+  return Number.isFinite(date.getTime()) && date.getUTCFullYear() >= 1 && date.getUTCFullYear() <= 9999
+    ? date.toISOString() : undefined;
+}
+
 function safeMediaUrl(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return '';
   try {
@@ -64,6 +75,12 @@ function mediaType(value: unknown, url: string): MediaItem['type'] {
 export function normalizeMemory(id: string, raw: unknown, source: Memory['source'] = 'firebase'): Memory {
   const record = asRecord(raw);
   const description = text(record.description);
+  const createdAt = publicationTimestamp(record.createdAt);
+  const reminderRecord = asRecord(record.reminder);
+  const reminderDate = calendarDate(reminderRecord.date);
+  const reminder = typeof reminderRecord.enabled === 'boolean' && reminderDate &&
+    (reminderRecord.repeat === 'once' || reminderRecord.repeat === 'yearly')
+    ? { enabled: reminderRecord.enabled, date: reminderDate, label: text(reminderRecord.label), repeat: reminderRecord.repeat as 'once' | 'yearly' } : undefined;
   const date = calendarDate(record.photoDate) || calendarDate(record.date) || timestampDate(record.createdAt);
   const derivedTitle = description.replace(/\s+/g, ' ').trim();
   const title = text(record.title).trim() ||
@@ -74,6 +91,7 @@ export function normalizeMemory(id: string, raw: unknown, source: Memory['source
   if (typeof record.url === 'string') candidates.push({ url: record.url, type: record.type, storagePath: record.storagePath });
   const media: MediaItem[] = [];
   const seenUrls = new Map<string, MediaItem>();
+  const usedMediaIds = new Set<string>();
   for (const candidate of candidates) {
     const item = typeof candidate === 'string' ? { url: candidate } : asRecord(candidate);
     const url = safeMediaUrl(item.url);
@@ -85,7 +103,11 @@ export function normalizeMemory(id: string, raw: unknown, source: Memory['source
       if (mediaType(item.type, url) === 'video') duplicate.type = 'video';
       continue;
     }
-    const normalized: MediaItem = { id: `${id}-media-${media.length + 1}`, url, type: mediaType(item.type, url), ...(storagePath ? { storagePath } : {}) };
+    const requestedId = text(item.id);
+    let mediaId = /^[A-Za-z0-9_-]{1,180}$/.test(requestedId) && !usedMediaIds.has(requestedId) ? requestedId : `${id}-media-${media.length + 1}`;
+    while (usedMediaIds.has(mediaId)) mediaId += '-next';
+    usedMediaIds.add(mediaId);
+    const normalized: MediaItem = { id: mediaId, url, type: mediaType(item.type, url), ...(storagePath ? { storagePath } : {}) };
     seenUrls.set(url, normalized);
     media.push(normalized);
   }
@@ -94,6 +116,9 @@ export function normalizeMemory(id: string, raw: unknown, source: Memory['source
     id, title, description, date, location: text(record.location),
     tags: stringList(record.tags), album: text(record.album), author: text(record.author),
     media, favorites: stringList(record.favorites), source,
+    ...(createdAt ? { createdAt } : {}),
+    ...(text(record.coverMediaId) ? { coverMediaId: text(record.coverMediaId) } : {}),
+    ...(reminder ? { reminder } : {}),
   };
 }
 

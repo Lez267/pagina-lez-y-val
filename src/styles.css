@@ -22,3 +22,5 @@
 @media(max-width:600px){.hero-text h1{font-size:56px}.hero-text>p{font-size:12px}.hero-actions .button{font-size:10px}.hero-letter-link{font-size:9px}.memory-card-body>p{font-size:10px}.memory-location{font-size:8px}.studio-local-note{font-size:10px}.studio-letter-details>p{font-size:12px}.topbar-greeting>span:last-child{display:none}}
 
 .app-shell{overflow-x:clip}
+
+.app-starting{min-height:100vh;display:grid;place-content:center;text-align:center;gap:1rem;background:#faf7f0;color:#5c6953}.app-starting>span{font-size:3rem;color:#aa786d}
