@@ -1297,6 +1297,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
             {filterTab === 'pending'
               ? 'Pueden programar una nueva película para su próxima cita de mantita y palomitas.'
               : 'Agrega una película a la cartelera para disfrutar de su siguiente función privada.'}
+          </p>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '12px' }}>
             <button className="cinepolis-cta-add" onClick={handleOpenAdd}>
               <Plus size={16} />
