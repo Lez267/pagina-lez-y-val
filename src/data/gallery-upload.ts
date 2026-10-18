@@ -2,7 +2,7 @@ import { collection, doc, runTransaction, serverTimestamp } from 'firebase/fires
 import type { MediaItem } from './types';
 import { requireConnectedGallery } from './firebase';
 import { validateGalleryFiles, validateGalleryMetadata, type GalleryPublication } from '../lib/gallery';
-import { samePublicationValue } from '../lib/publication';
+import { newPublicationMedia, samePublicationValue } from '../lib/publication';
 
 type SignedUpload = { uploadUrl: string; resourceType: 'image' | 'video'; cloudName: string; apiKey: string; params: Record<string, string>; signature: string };
 const uploadedFiles = new WeakMap<File, { uid: string; media: MediaItem }>();
@@ -50,8 +50,9 @@ export async function publishGalleryMemory(draft: GalleryPublication, onProgress
   const first = draft.files[0];
   let pending = publicationIds.get(first);
   if (!pending || pending.uid !== uid) { pending = { uid, id: doc(collection(db, 'memories')).id }; publicationIds.set(first, pending); }
-  const media: MediaItem[] = [];
-  for (const file of draft.files) { media.push(await uploadFile(file, uid)); onProgress?.(media.length, draft.files.length); }
+  const uploaded: MediaItem[] = [];
+  for (const file of draft.files) { uploaded.push(await uploadFile(file, uid)); onProgress?.(uploaded.length, draft.files.length); }
+  const media = newPublicationMedia(pending.id, uploaded);
   assertSameUser(uid);
   const details = {
     title: draft.title.trim(), description: draft.description.trim(), photoDate: draft.date,

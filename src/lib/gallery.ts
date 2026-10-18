@@ -1,4 +1,5 @@
 import type { MediaItem, Memory } from '../data/types';
+import { KNOWN_ALE_UIDS, KNOWN_VALERIA_UIDS } from './game-progression';
 
 /** Publication time is separate from the day the photo was taken. */
 export type GalleryTimestamp = string | number | Date | { seconds: number; nanoseconds?: number } | { _seconds: number };
@@ -69,7 +70,8 @@ export function galleryOnThisDay(memories: GalleryMemory[], today = galleryToday
   if (!validGalleryDate(today)) return [];
   return memories.filter(memory => validGalleryDate(memory.date) && memory.date.slice(5) === today.slice(5) && memory.date.slice(0, 4) < today.slice(0, 4)).sort((a, b) => b.date.localeCompare(a.date));
 }
-export function galleryCover(memory: GalleryMemory): MediaItem | undefined {
+export function galleryCover(memory?: GalleryMemory): MediaItem | undefined {
+  if (!memory || !Array.isArray(memory.media)) return undefined;
   return memory.media.find(media => media.id === memory.coverMediaId) ?? memory.media[0];
 }
 export function galleryWithCoverFirst(media: MediaItem[], coverId?: string): MediaItem[] {
@@ -88,6 +90,33 @@ export function galleryAlbums(memories: GalleryMemory[]): GalleryAlbum[] {
     return { name, memories: sorted, cover: galleryCover(sorted.find(item => item.media.length > 0) ?? sorted[0]), fileCount: items.reduce((count, item) => count + item.media.length, 0) };
   }).sort((a, b) => a.name.localeCompare(b.name, 'es'));
 }
+
+export function isAleFavoriteMemory(memory: { favorites?: string[] }, aleUid?: string): boolean {
+  if (!memory.favorites || !Array.isArray(memory.favorites)) return false;
+  return memory.favorites.some(fav => {
+    if (typeof fav !== 'string') return false;
+    const lower = fav.trim().toLowerCase();
+    if (lower === 'ale' || lower === 'alejandro' || lower === 'lezz') return true;
+    if (fav === '798325c978231df073b118795facaa91392bba25f9d3e4a86b77666977495a2e') return true;
+    if (KNOWN_ALE_UIDS.includes(fav)) return true;
+    if (aleUid && fav === aleUid) return true;
+    return false;
+  });
+}
+
+export function isValFavoriteMemory(memory: { favorites?: string[] }, valUid?: string): boolean {
+  if (!memory.favorites || !Array.isArray(memory.favorites)) return false;
+  return memory.favorites.some(fav => {
+    if (typeof fav !== 'string') return false;
+    const lower = fav.trim().toLowerCase();
+    if (lower === 'val' || lower === 'valeria' || lower === 'vale') return true;
+    if (fav === '57c7f9e9a1bbf5f4aa8758a639193393cdeafed5b84bc5ce2246a1f525835f1b' || fav === '51a62b09d3405f16d9b2ef14bb63e5b84b01e9f93497c1416f538e1d5ca61165') return true;
+    if (KNOWN_VALERIA_UIDS.includes(fav)) return true;
+    if (valUid && fav === valUid) return true;
+    return false;
+  });
+}
+
 export function nextGalleryReminder(reminder: GalleryReminder, today = galleryToday()): string | null {
   if (!reminder.enabled || !validGalleryDate(reminder.date) || !validGalleryDate(today)) return null;
   if (reminder.repeat === 'once') return reminder.date >= today ? reminder.date : null;

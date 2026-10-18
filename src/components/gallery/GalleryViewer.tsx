@@ -1,7 +1,8 @@
+'use client';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, CalendarDays, ExternalLink, Film, Heart, Image as ImageIcon, MapPin, PenLine, Play, ZoomIn, ZoomOut } from 'lucide-react';
 import type { MediaItem } from '../../data/types';
-import { galleryCover, galleryDateLabel, safeGalleryMediaUrl, type GalleryMemory } from '../../lib/gallery';
+import { galleryCover, galleryDateLabel, isAleFavoriteMemory, isValFavoriteMemory, safeGalleryMediaUrl, type GalleryMemory } from '../../lib/gallery';
 import { Dialog } from '../Dialog';
 import './gallery.css';
 
@@ -65,7 +66,19 @@ function GalleryViewerContent({ memories, memory, onNavigate, onClose, onEdit }:
       </div>
       {fileCount > 0 && <div className="galleryx-file-navigation"><button type="button" className="galleryx-icon-button" disabled={fileIndex === 0} onClick={() => selectFile(fileIndex - 1)} aria-label="Archivo anterior"><ArrowLeft size={18} /></button><span aria-live="polite">{file?.type === 'video' ? 'Video' : 'Foto'} {fileIndex + 1} de {fileCount}</span><button type="button" className="galleryx-icon-button" disabled={fileIndex >= fileCount - 1} onClick={() => selectFile(fileIndex + 1)} aria-label="Archivo siguiente"><ArrowRight size={18} /></button></div>}
       {fileCount > 1 && <div className="galleryx-file-strip" ref={strip} role="group" aria-label="Fotos y videos de este recuerdo">{memory.media.map((media, index) => <button type="button" key={media.id} aria-pressed={fileIndex === index} aria-label={`Ver ${media.type === 'video' ? 'video' : 'foto'} ${index + 1}`} onClick={() => selectFile(index)}><GalleryThumbnail media={media} /><span>{index + 1}</span></button>)}</div>}
-      <div className="galleryx-viewer-meta"><span><CalendarDays size={14} aria-hidden="true" />{galleryDateLabel(memory.date)}</span>{memory.location && <span><MapPin size={14} aria-hidden="true" />{memory.location}</span>}{memory.album && <span>{memory.album}</span>}</div>
+      {(() => {
+        const isAleFav = isAleFavoriteMemory(memory);
+        const isValFav = isValFavoriteMemory(memory);
+        const favText = isAleFav && isValFav ? 'Favorito de Alejandro y Valeria ♡' : isAleFav ? 'Favorito de Alejandro ♡' : isValFav ? 'Favorito de Valeria ♡' : null;
+        return (
+          <div className="galleryx-viewer-meta">
+            <span><CalendarDays size={14} aria-hidden="true" />{galleryDateLabel(memory.date)}</span>
+            {memory.location && <span><MapPin size={14} aria-hidden="true" />{memory.location}</span>}
+            {memory.album && <span>{memory.album}</span>}
+            {favText && <span className="galleryx-viewer-fav-meta"><Heart size={13} fill="currentColor" aria-hidden="true" /> {favText}</span>}
+          </div>
+        );
+      })()}
       {memory.description && <p className="galleryx-viewer-description">{memory.description}</p>}
       {memory.tags.length > 0 && <div className="galleryx-tags" aria-label="Etiquetas">{memory.tags.map(tag => <span key={tag}>{tag}</span>)}</div>}
       <div className="galleryx-viewer-actions"><span>Guardado por {memory.author || 'ustedes'}</span><div>{onEdit && <button type="button" className="text-link" onClick={() => onEdit(memory)}><PenLine size={14} /> Editar detalles</button>}{url && <a className="text-link" href={url} target="_blank" rel="noopener noreferrer">Abrir archivo <ExternalLink size={13} /></a>}</div></div>

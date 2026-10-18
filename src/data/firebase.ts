@@ -1,5 +1,5 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { browserSessionPersistence, getAuth, GoogleAuthProvider, setPersistence, signInWithPopup, signOut, type Auth } from 'firebase/auth';
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, onAuthStateChanged, setPersistence, signInWithPopup, signOut, type Auth } from 'firebase/auth';
 import { collection, getDocs, getFirestore, onSnapshot } from 'firebase/firestore';
 import { firebaseConfig } from './firebase-config';
 import { normalizeMemory } from './normalizer';
@@ -45,12 +45,39 @@ export async function readCurrentMemories() {
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
-export function watchCurrentMemories(onMemories: (memories: GallerySession['memories']) => void, onError: () => void) {
-  const { auth, db, user } = requireConnectedGallery();
-  return onSnapshot(collection(db, 'memories'), snapshot => {
-    if (auth.currentUser?.uid !== user.uid) return;
-    onMemories(snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase')).sort((a, b) => b.date.localeCompare(a.date)));
-  }, () => { if (auth.currentUser?.uid === user.uid) onError(); });
+export function watchCurrentMemories(onMemories: (memories: GallerySession['memories']) => void, onError?: () => void) {
+  try {
+    const auth = getGalleryAuth();
+    let unsubsSnapshot: (() => void) | undefined;
+    let cancelled = false;
+
+    const unsubsAuth = onAuthStateChanged(auth, user => {
+      if (cancelled) return;
+      if (!user || auth.app.options.projectId !== 'lezz-val-universo') {
+        unsubsSnapshot?.();
+        unsubsSnapshot = undefined;
+        return;
+      }
+      if (unsubsSnapshot) return;
+      const db = getFirestore(auth.app);
+      unsubsSnapshot = onSnapshot(collection(db, 'memories'), snapshot => {
+        if (cancelled || auth.currentUser?.uid !== user.uid) return;
+        onMemories(snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase')).sort((a, b) => b.date.localeCompare(a.date)));
+      }, () => {
+        if (!cancelled && auth.currentUser?.uid === user.uid && onError) onError();
+      });
+    }, () => {
+      if (!cancelled && onError) onError();
+    });
+
+    return () => {
+      cancelled = true;
+      unsubsSnapshot?.();
+      unsubsAuth();
+    };
+  } catch {
+    return () => {};
+  }
 }
 
 function friendlyError(error: unknown): Error {
@@ -87,7 +114,7 @@ export function connectGallery(): Promise<GallerySession> {
     try {
       await authCleanup;
       if (epoch !== connectionEpoch) throw new Error('La conexión fue cancelada.');
-      await setPersistence(auth, browserSessionPersistence);
+      await setPersistence(auth, browserLocalPersistence);
       if (epoch !== connectionEpoch) throw new Error('La conexión fue cancelada.');
       const result = await signInWithPopup(auth, new GoogleAuthProvider());
       if (epoch !== connectionEpoch) throw new Error('La conexión fue cancelada.');
@@ -95,7 +122,13 @@ export function connectGallery(): Promise<GallerySession> {
       if (epoch !== connectionEpoch) throw new Error('La conexión fue cancelada.');
       const memories = snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase'))
         .sort((a, b) => b.date.localeCompare(a.date));
-      return { memories, uid: result.user.uid, displayName: result.user.displayName || 'Nuestra galería' };
+      return {
+        memories,
+        uid: result.user.uid,
+        displayName: result.user.displayName || 'Nuestra galería',
+        email: result.user.email || '',
+        photoURL: result.user.photoURL || '',
+      };
     } catch (error) {
       // An old popup may settle after cancellation. Clear it only if no newer
       // attempt has taken ownership; otherwise its cleanup must leave that
@@ -106,6 +139,38 @@ export function connectGallery(): Promise<GallerySession> {
   })().finally(() => { if (pendingConnection === connection) pendingConnection = undefined; });
   pendingConnection = connection;
   return connection;
+}
+
+/** Restores an existing persisted session across browser restarts. */
+export function restoreSavedSession(): Promise<GallerySession | null> {
+  return new Promise(resolve => {
+    try {
+      const auth = getGalleryAuth();
+      const unsubscribe = onAuthStateChanged(auth, async user => {
+        unsubscribe();
+        if (!user || auth.app.options.projectId !== 'lezz-val-universo') {
+          resolve(null);
+          return;
+        }
+        try {
+          const snapshot = await getDocs(collection(getFirestore(auth.app), 'memories'));
+          const memories = snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase'))
+            .sort((a, b) => b.date.localeCompare(a.date));
+          resolve({
+            memories,
+            uid: user.uid,
+            displayName: user.displayName || 'Nuestra galería',
+            email: user.email || '',
+            photoURL: user.photoURL || '',
+          });
+        } catch {
+          resolve(null);
+        }
+      }, () => resolve(null));
+    } catch {
+      resolve(null);
+    }
+  });
 }
 
 /** Ends only this app's Firebase session. Does not remove records, files or subscriptions. */

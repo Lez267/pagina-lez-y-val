@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, CalendarDays, Check, Image as ImageIcon, MapPin, Play, Search, SlidersHorizontal, Heart, ExternalLink } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarDays, Check, Image as ImageIcon, MapPin, Play, Search, SlidersHorizontal, Heart, ExternalLink, Sparkles } from 'lucide-react';
 import type { Memory } from '../data/types';
 import { dateLabel } from '../lib/dates';
 import { useLocalState } from '../lib/storage';
@@ -24,7 +24,7 @@ export function MemoriesPage({ memories, namespace }: { memories: Memory[]; name
   const albums = Array.from(new Set(memories.map(memory => memory.album).filter(Boolean))).sort();
   const visible = useMemo(() => memories.filter(memory => (!album || memory.album === album) && (filter !== 'favorites' || favorites.includes(memory.id)) && (filter !== 'videos' || memory.media.some(item => item.type === 'video')) && (filter !== 'photos' || memory.media.some(item => item.type === 'image')) && `${memory.title} ${memory.description} ${memory.location} ${memory.date}`.toLocaleLowerCase('es').includes(search.toLocaleLowerCase('es'))).sort((a,b) => b.date.localeCompare(a.date)), [memories, filter, favorites, search, album]);
   const toggleFavorite = (id: string) => setFavorites(favorites.includes(id) ? favorites.filter(item => item !== id) : [...favorites,id]);
-  return <><header className="page-header"><span className="eyebrow">DONDE VIVEN LOS MOMENTOS</span><h1 className="page-title">Nuestro jardín de <em>recuerdos.</em></h1><p className="muted">Los días grandes. Los pequeños. Todos los que son nuestros.</p></header><div className="gallery-toolbar"><label className="search-field"><Search size={17}/><input aria-label="Buscar recuerdos" value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar un momento, una fecha, un lugar…"/></label><label className="album-select"><SlidersHorizontal size={16}/><select aria-label="Filtrar por colección" value={album} onChange={event => setAlbum(event.target.value)}><option value="">Todas las colecciones</option>{albums.map(name => <option key={name} value={name}>{name}</option>)}</select></label></div><div className="filter-row">{[['all','Todos los recuerdos'],['photos','Fotografías'],['videos','Videos'],['favorites','Mis favoritos']].map(([value,label]) => <button key={value} className={`filter-chip ${filter === value ? 'active' : ''}`} onClick={() => setFilter(value)} aria-pressed={filter === value}>{filter === value && <Check size={13}/>} {label}</button>)}<span className="result-count">{visible.length} {visible.length === 1 ? 'recuerdo' : 'recuerdos'}</span></div>{!saved && <p className="notice" role="status">El navegador no pudo guardar tus favoritos en este dispositivo.</p>}<div className="memory-grid">{visible.map(memory => <div className="memory-tile" key={memory.id}><MemoryCard memory={memory} onOpen={setSelected}/><button className={`favorite-button ${favorites.includes(memory.id) ? 'is-favorite' : ''}`} onClick={() => toggleFavorite(memory.id)} aria-label={`${favorites.includes(memory.id) ? 'Quitar de' : 'Añadir a'} mis favoritos: ${memory.title}`} aria-pressed={favorites.includes(memory.id)}><Heart size={16} fill={favorites.includes(memory.id) ? 'currentColor' : 'none'}/></button></div>)}</div>{!visible.length && <div className="empty-state"><ImageIcon size={35}/><h2>Aquí todavía hay espacio para un recuerdo.</h2><p>Prueba otra búsqueda o abre tu galería existente.</p></div>}<p className="footnote">Los favoritos de esta versión se guardan en este dispositivo. Tus publicaciones originales permanecen intactas.</p>{selected && <MemoryDialog key={selected.id} memory={selected} onClose={() => setSelected(null)}/>}</>;
+  return <><header className="page-header"><h1 className="page-title">Nuestros <em>recuerdos</em></h1><p className="muted">Todas las fotos, videos y momentos que hemos compartido juntos.</p></header><div className="gallery-toolbar"><label className="search-field"><Search size={17}/><input aria-label="Buscar recuerdos" value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar un momento, una fecha, un lugar…"/></label><label className="album-select"><SlidersHorizontal size={16}/><select aria-label="Filtrar por colección" value={album} onChange={event => setAlbum(event.target.value)}><option value="">Todas las colecciones</option>{albums.map(name => <option key={name} value={name}>{name}</option>)}</select></label></div><div className="filter-row">{[['all','Todos los recuerdos'],['photos','Fotografías'],['videos','Videos'],['favorites','Mis favoritos']].map(([value,label]) => <button key={value} className={`filter-chip ${filter === value ? 'active' : ''}`} onClick={() => setFilter(value)} aria-pressed={filter === value}>{filter === value && <Check size={13}/>} {label}</button>)}<span className="result-count">{visible.length} {visible.length === 1 ? 'recuerdo' : 'recuerdos'}</span></div>{!saved && <p className="notice" role="status">El navegador no pudo guardar tus favoritos en este dispositivo.</p>}<div className="memory-grid" key={`${filter}-${album}-${search ? 'search' : 'all'}`}>{visible.map((memory, index) => { const rot = ((index % 5) - 2) * 1.5; return <div className="memory-tile" key={memory.id} style={{ '--card-idx': Math.min(index, 24), '--card-rot': `${rot}deg` } as React.CSSProperties}><MemoryCard memory={memory} onOpen={setSelected}/><button className={`favorite-button ${favorites.includes(memory.id) ? 'is-favorite' : ''}`} onClick={() => toggleFavorite(memory.id)} aria-label={`${favorites.includes(memory.id) ? 'Quitar de' : 'Añadir a'} mis favoritos: ${memory.title}`} aria-pressed={favorites.includes(memory.id)}><Heart size={16} fill={favorites.includes(memory.id) ? 'currentColor' : 'none'}/></button></div>; })}</div>{!visible.length && <div className="empty-state"><ImageIcon size={35}/><h2>Aún no hay recuerdos aquí</h2><p>Prueba otra búsqueda o añade fotos a tu galería.</p></div>}<p className="footnote">Los favoritos de esta versión se guardan en este dispositivo.</p>{selected && <MemoryDialog key={selected.id} memory={selected} onClose={() => setSelected(null)}/>}</>;
 }
 
 export function TimelinePage({ memories }: { memories: Memory[] }) {
@@ -32,5 +32,173 @@ export function TimelinePage({ memories }: { memories: Memory[] }) {
   const years = Array.from(new Set(memories.map(item => item.date ? item.date.slice(0,4) : 'Sin fecha'))).sort((a,b) => a === 'Sin fecha' ? 1 : b === 'Sin fecha' ? -1 : b.localeCompare(a));
   const [year, setYear] = useState('all');
   const visibleYears = year === 'all' ? years : years.filter(item => item === year);
-  return <><header className="page-header"><span className="eyebrow">UNA HISTORIA QUE SIGUE FLORECIENDO</span><h1 className="page-title">Érase una vez, <em>nosotros.</em></h1><p className="muted">Cada fecha tiene algo que contar. Aquí las guardamos todas.</p></header><div className="timeline-intro"><CalendarDays size={23}/><p>La historia se forma con la fecha de cada recuerdo de la galería.</p><label><span className="sr-only">Elegir año</span><select className="input" value={year} onChange={event => setYear(event.target.value)}><option value="all">Todos los años</option>{years.map(item => <option key={item} value={item}>{item}</option>)}</select></label></div><div className="timeline">{visibleYears.map(yearValue => <section key={yearValue} className="timeline-year"><div className="timeline-year-label">{yearValue}</div>{memories.filter(memory => (memory.date ? memory.date.slice(0,4) : 'Sin fecha') === yearValue).sort((a,b) => b.date.localeCompare(a.date)).map(memory => <article key={memory.id} className="timeline-entry"><div className="timeline-dot"/><div className="timeline-date"><span>{memory.date ? dateLabel(memory.date, { day:'2-digit' }) : '—'}</span><small>{memory.date ? dateLabel(memory.date, { month:'short' }) : 'sin fecha'}</small></div><button className="timeline-story" onClick={() => setSelected(memory)}>{memory.media.find(item => item.type === 'image') && <img src={memory.media.find(item => item.type === 'image')!.url} alt="" loading="lazy"/>}<div><span className="eyebrow">{memory.album || 'Un capítulo nuestro'}</span><h2>{memory.title}</h2><p>{memory.description}</p>{memory.location && <span className="memory-location"><MapPin size={12}/>{memory.location}</span>}</div><ArrowRight size={18} className="timeline-arrow"/></button></article>)}</section>)}</div>{!memories.length && <div className="empty-state"><Heart size={30}/><h2>La historia empieza con sus recuerdos.</h2><p>Abre la galería para verlos ordenados por fecha.</p></div>}{selected && <MemoryDialog key={selected.id} memory={selected} onClose={() => setSelected(null)}/>}</>;
+  return (
+    <>
+      <header className="page-header">
+        <h1 className="page-title">Línea del <em>tiempo</em></h1>
+        <p className="muted">Nuestra historia ordenada fecha por fecha, desde el día en que empezó todo.</p>
+      </header>
+      <div className="timeline-intro">
+        <CalendarDays size={23}/>
+        <p>Momentos organizados cronológicamente por la fecha de cada recuerdo.</p>
+        <label>
+          <span className="sr-only">Elegir año</span>
+          <select className="input" value={year} onChange={event => setYear(event.target.value)}>
+            <option value="all">Todos los años</option>
+            {years.map(item => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>
+      </div>
+      <div className="timeline" key={year}>
+        {visibleYears.map(yearValue => {
+          const yearMemories = memories
+            .filter(memory => (memory.date ? memory.date.slice(0,4) : 'Sin fecha') === yearValue)
+            .sort((a,b) => b.date.localeCompare(a.date));
+
+          // Agrupamos recuerdos consecutivos que ocurrieron en la misma fecha
+          const dayGroups: { date: string; items: Memory[] }[] = [];
+          for (const memory of yearMemories) {
+            const d = memory.date || '';
+            const last = dayGroups[dayGroups.length - 1];
+            if (last && last.date === d && d !== '') {
+              last.items.push(memory);
+            } else {
+              dayGroups.push({ date: d, items: [memory] });
+            }
+          }
+
+          let runningIdx = 0;
+
+          return (
+            <section key={yearValue} className="timeline-year">
+              <div className="timeline-year-label">{yearValue}</div>
+              {dayGroups.map(group => {
+                if (group.items.length === 1) {
+                  const memory = group.items[0];
+                  const itemIdx = runningIdx++;
+                  const rot = ((itemIdx % 4) - 1.5) * 0.8;
+                  return (
+                    <article
+                      key={memory.id}
+                      className="timeline-entry"
+                      style={{
+                        '--tl-idx': Math.min(itemIdx, 20),
+                        '--tl-rot': `${rot}deg`,
+                      } as React.CSSProperties}
+                    >
+                      <div className="timeline-dot"/>
+                      <div className="timeline-date">
+                        <span>{memory.date ? dateLabel(memory.date, { day:'2-digit' }) : '—'}</span>
+                        <small>{memory.date ? dateLabel(memory.date, { month:'short' }) : 'sin fecha'}</small>
+                      </div>
+                      <button className="timeline-story" onClick={() => setSelected(memory)}>
+                        {memory.media.find(item => item.type === 'image') && (
+                          <img src={memory.media.find(item => item.type === 'image')!.url} alt="" loading="lazy"/>
+                        )}
+                        <div>
+                          <span className="eyebrow">{memory.album || 'Un capítulo nuestro'}</span>
+                          <h2>{memory.title}</h2>
+                          <p>{memory.description}</p>
+                          {memory.location && <span className="memory-location"><MapPin size={12}/>{memory.location}</span>}
+                        </div>
+                        <ArrowRight size={18} className="timeline-arrow"/>
+                      </button>
+                    </article>
+                  );
+                }
+
+                // Grupo con múltiples recuerdos del mismo día (Lapso remarcado en la línea de tiempo)
+                const groupStartIdx = runningIdx;
+                runningIdx += group.items.length;
+                const totalInGroup = group.items.length;
+
+                return (
+                  <div
+                    key={`day-group-${group.date}-${group.items[0].id}`}
+                    className="timeline-day-cluster"
+                  >
+                    {/* Encabezado destacado del día que unifica todos los momentos */}
+                    <div className="timeline-day-header">
+                      <div className="timeline-day-header-node" title={`Día especial: ${totalInGroup} momentos juntos`}>
+                        <Heart size={10} fill="currentColor" />
+                      </div>
+                      <div className="timeline-day-header-info">
+                        <strong className="timeline-day-header-date">
+                          {group.date ? dateLabel(group.date, { day: 'numeric', month: 'long' }) : 'Sin fecha'}
+                        </strong>
+                        <span className="timeline-day-header-badge">
+                          <Sparkles size={11} aria-hidden="true" />
+                          <span>{totalInGroup} momentos juntos</span>
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Riel continuo / corchete que abraza todo el lapso de este día */}
+                    <div className="timeline-cluster-track" aria-hidden="true">
+                      <div className="timeline-cluster-glow-bar" />
+                    </div>
+
+                    {group.items.map((memory, subIndex) => {
+                      const itemIdx = groupStartIdx + subIndex;
+                      const rot = ((itemIdx % 4) - 1.5) * 0.8;
+                      const isFirst = subIndex === 0;
+                      const isLast = subIndex === totalInGroup - 1;
+
+                      return (
+                        <article
+                          key={memory.id}
+                          className={`timeline-entry timeline-cluster-entry ${isFirst ? 'is-cluster-first' : ''} ${isLast ? 'is-cluster-last' : ''}`}
+                          style={{
+                            '--tl-idx': Math.min(itemIdx, 20),
+                            '--tl-rot': `${rot}deg`,
+                          } as React.CSSProperties}
+                        >
+                          <div
+                            className="timeline-dot timeline-cluster-dot is-cluster-branch"
+                            title={`Momento ${subIndex + 1} de ${totalInGroup} de este día`}
+                          />
+
+                          <div className="timeline-date timeline-cluster-order-col">
+                            <span className="timeline-cluster-order-num">#{subIndex + 1}</span>
+                          </div>
+
+                          <button className="timeline-story timeline-cluster-story" onClick={() => setSelected(memory)}>
+                            {memory.media.find(item => item.type === 'image') && (
+                              <img src={memory.media.find(item => item.type === 'image')!.url} alt="" loading="lazy" />
+                            )}
+                            <div>
+                              <span className="eyebrow eyebrow-cluster">
+                                <span className="cluster-badge">
+                                  <Sparkles size={11} aria-hidden="true" />
+                                  {`Momento ${subIndex + 1} de ${totalInGroup}`}
+                                </span>
+                                <span className="eyebrow-sep">·</span>
+                                <span>{memory.album || 'Un capítulo nuestro'}</span>
+                              </span>
+                              <h2>{memory.title}</h2>
+                              <p>{memory.description}</p>
+                              {memory.location && <span className="memory-location"><MapPin size={12} />{memory.location}</span>}
+                            </div>
+                            <ArrowRight size={18} className="timeline-arrow" />
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </section>
+          );
+        })}
+      </div>
+      {!memories.length && (
+        <div className="empty-state">
+          <Heart size={30}/>
+          <h2>Aún no hay momentos en la línea de tiempo</h2>
+          <p>Sube recuerdos a la galería para verlos aquí organizados por fecha.</p>
+        </div>
+      )}
+      {selected && <MemoryDialog key={selected.id} memory={selected} onClose={() => setSelected(null)}/>}
+    </>
+  );
 }

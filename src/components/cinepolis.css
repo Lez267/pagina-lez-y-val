@@ -1,0 +1,2168 @@
+/* ==========================================================================
+   CINÉPOLIS VIP EXPERIENCE — CARTELERA DE CINE PARA ALE & VAL
+   ========================================================================== */
+
+/* Fondo general y contenedor principal */
+.cartelera-page.cinepolis-theme {
+  max-width: 100%;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px 28px 80px;
+  background: linear-gradient(180deg, #060b18 0%, #0b152d 35%, #080f24 100%);
+  border-radius: 28px;
+  border: 1px solid rgba(255, 184, 0, 0.2);
+  box-shadow: 0 24px 80px rgba(3, 7, 20, 0.8), 0 0 100px rgba(255, 184, 0, 0.04);
+  color: #f1f5f9;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Efecto de haz de luz de proyector de cine en el fondo */
+.cartelera-page.cinepolis-theme::before {
+  content: '';
+  position: absolute;
+  top: -150px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 400px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 184, 0, 0.15) 0%, rgba(56, 189, 248, 0.05) 50%, transparent 80%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* 1. Marquesina Header Estilo Cinépolis */
+.cinepolis-marquee-header {
+  text-align: center;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  padding: 24px 20px 28px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 184, 0, 0.14) 0%, transparent 80%);
+  border-bottom: 1px solid rgba(255, 184, 0, 0.2);
+  border-radius: 24px 24px 0 0;
+  z-index: 1;
+}
+
+.cinepolis-top-brand-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.cinepolis-logo-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cinepolis-stars-glow {
+  color: #ffb800;
+  font-size: 13px;
+  letter-spacing: 3px;
+  text-shadow: 0 0 10px rgba(255, 184, 0, 0.7);
+}
+
+.cinepolis-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  background: #040916;
+  border: 1px solid rgba(255, 184, 0, 0.45);
+  border-radius: 8px;
+  padding: 4px 12px;
+  gap: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.cinepolis-brand-wordmark {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  background: linear-gradient(135deg, #ffffff 0%, #ffdf79 60%, #ffb800 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 16px rgba(255, 184, 0, 0.35);
+}
+
+.cinepolis-brand-vip {
+  display: none;
+}
+
+.cinepolis-cinema-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(14, 25, 53, 0.85);
+  border: 1px solid rgba(255, 184, 0, 0.25);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12.5px;
+  color: #cbd5e1;
+}
+
+.cinepolis-cinema-selector .selector-icon {
+  color: #ffb800;
+}
+
+.cinepolis-cinema-selector strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.cinepolis-hero-titles {
+  margin: 10px 0 20px;
+}
+
+.cinepolis-title {
+  font-size: clamp(32px, 5.5vw, 48px);
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 8px;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.6);
+}
+
+.cinepolis-title em {
+  font-family: var(--font-heading, 'Cormorant Garamond', Georgia, serif);
+  font-style: italic;
+  font-weight: 500;
+  color: #ffb800;
+  text-shadow: 0 0 24px rgba(255, 184, 0, 0.4);
+}
+
+.cinepolis-subtitle {
+  font-size: 16px;
+  color: #cbd5e1;
+  margin: 0 auto;
+  max-width: 600px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.cinepolis-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.cinepolis-cta-random {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(230, 81, 0, 0.95) 0%, rgba(255, 143, 0, 0.95) 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 184, 0, 0.45);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 22px;
+  border-radius: 24px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(230, 81, 0, 0.35);
+  transition: all 0.25s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.cinepolis-cta-random:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, rgba(245, 124, 0, 1) 0%, rgba(255, 160, 0, 1) 100%);
+  box-shadow: 0 10px 26px rgba(230, 81, 0, 0.5);
+}
+
+.cinepolis-cta-random:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.is-shuffling-spin {
+  animation: shuffleSpin 0.6s linear infinite;
+}
+
+@keyframes shuffleSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.cinepolis-cta-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #ffb800 0%, #ffa000 100%);
+  color: #070d1e;
+  border: none;
+  font-weight: 700;
+  font-size: 14.5px;
+  padding: 10px 24px;
+  border-radius: 24px;
+  cursor: pointer;
+  box-shadow: 0 6px 22px rgba(255, 184, 0, 0.35);
+  transition: all 0.25s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.cinepolis-cta-add:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, #ffc425 0%, #ffad1a 100%);
+  box-shadow: 0 10px 28px rgba(255, 184, 0, 0.5);
+}
+
+.cinepolis-cta-export {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(18, 32, 68, 0.85);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 184, 0, 0.25);
+  font-weight: 600;
+  font-size: 13.5px;
+  padding: 10px 18px;
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cinepolis-cta-export:hover {
+  background: rgba(26, 44, 92, 0.95);
+  color: #ffffff;
+  border-color: rgba(255, 184, 0, 0.45);
+}
+
+/* Banner de Citas de Cine Reservadas Juntos */
+.cinepelis-reservations-banner {
+  background: linear-gradient(135deg, rgba(20, 36, 75, 0.95) 0%, rgba(13, 23, 49, 0.95) 100%);
+  border: 1px solid rgba(255, 184, 0, 0.35);
+  border-radius: 20px;
+  padding: 18px 22px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45), 0 0 40px rgba(255, 184, 0, 0.08);
+  position: relative;
+  z-index: 2;
+}
+
+.reservations-banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 184, 0, 0.2);
+  padding-bottom: 10px;
+}
+
+.reservations-banner-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reservations-banner-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffb800;
+  letter-spacing: 0.5px;
+}
+
+.gold-icon {
+  color: #ffb800;
+}
+
+.reservations-banner-badge {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: rgba(255, 184, 0, 0.15);
+  color: #ffb800;
+  border: 1px solid rgba(255, 184, 0, 0.3);
+  padding: 3px 10px;
+  border-radius: 12px;
+}
+
+.reservations-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.reservation-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(7, 13, 28, 0.7);
+  border: 1px solid rgba(255, 184, 0, 0.2);
+  border-radius: 14px;
+  padding: 10px 14px;
+  transition: all 0.2s ease;
+}
+
+.reservation-card:hover {
+  border-color: rgba(255, 184, 0, 0.4);
+  background: rgba(10, 18, 38, 0.85);
+}
+
+.reservation-poster {
+  width: 52px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 184, 0, 0.3);
+  flex-shrink: 0;
+}
+
+.reservation-poster-placeholder {
+  width: 52px;
+  height: 76px;
+  border-radius: 8px;
+  background: #040916;
+  border: 1px solid rgba(255, 184, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffb800;
+  flex-shrink: 0;
+}
+
+.reservation-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.reservation-movie-title {
+  margin: 0 0 6px 0;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reservation-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reservation-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.reservation-pill.date-pill {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.reservation-pill.time-pill {
+  background: rgba(255, 184, 0, 0.18);
+  color: #ffb800;
+  border: 1px solid rgba(255, 184, 0, 0.4);
+}
+
+.reservation-pill.seats-pill {
+  background: rgba(244, 114, 182, 0.15);
+  color: #f472b6;
+  border: 1px solid rgba(244, 114, 182, 0.3);
+}
+
+.reservation-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reservation-view-ticket-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: linear-gradient(135deg, #ffb800 0%, #ffa000 100%);
+  color: #050a17;
+  border: none;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.reservation-view-ticket-btn:hover {
+  background: #ffc425;
+  transform: translateY(-1px);
+}
+
+.reservation-cancel-btn {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reservation-cancel-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  color: #ffffff;
+}
+
+/* 2. Barra Dulcería Cinépolis (Combo Pareja) */
+.cinepolis-candy-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: linear-gradient(90deg, #101c3d 0%, #172856 50%, #101c3d 100%);
+  border: 1px solid rgba(255, 184, 0, 0.25);
+  border-radius: 16px;
+  padding: 12px 20px;
+  margin-bottom: 22px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  position: relative;
+  z-index: 1;
+}
+
+.candy-bar-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(255, 184, 0, 0.15);
+  color: #ffb800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.candy-bar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.candy-bar-copy strong {
+  font-size: 13.5px;
+  color: #ffb800;
+  font-weight: 700;
+}
+
+.candy-bar-copy span {
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
+.candy-bar-badge {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+/* 3. Selector de Fechas de Función (Cinépolis Ribbon) */
+.cinepolis-date-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(12, 22, 48, 0.9);
+  border: 1px solid rgba(34, 53, 98, 0.7);
+  border-radius: 18px;
+  padding: 10px 16px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.date-ribbon-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ffb800;
+  white-space: nowrap;
+  padding-right: 6px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.date-ribbon-items {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.date-ribbon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: rgba(22, 38, 80, 0.6);
+  color: #cbd5e1;
+  cursor: pointer;
+  min-width: 72px;
+  transition: all 0.2s ease;
+}
+
+.date-ribbon-btn:hover {
+  background: rgba(30, 52, 110, 0.85);
+  color: #ffffff;
+}
+
+.date-ribbon-btn.is-active {
+  background: #ffb800;
+  color: #070d1e;
+  border-color: #ffb800;
+  box-shadow: 0 4px 14px rgba(255, 184, 0, 0.35);
+}
+
+.date-day-week {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+}
+
+.date-day-num {
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 1px;
+}
+
+/* 4. Barra de estadísticas estilo Cinépolis */
+.cartelera-stats-bar.cinepolis-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  background: rgba(14, 25, 53, 0.75);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(34, 53, 98, 0.8);
+  border-radius: 20px;
+  padding: 16px 22px;
+  margin-bottom: 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.cartelera-stats-bar.cinepolis-stats .cartelera-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 12px;
+  transition: background 0.2s ease;
+}
+
+.cartelera-stats-bar.cinepolis-stats .cartelera-stat-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cartelera-stats-bar.cinepolis-stats .cartelera-stat-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cartelera-stats-bar.cinepolis-stats .pending-icon {
+  background: rgba(255, 184, 0, 0.15);
+  color: #ffb800;
+}
+
+.cartelera-stats-bar.cinepolis-stats .watched-icon {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.cartelera-stats-bar.cinepolis-stats .total-icon {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38bdf8;
+}
+
+.cartelera-stats-bar.cinepolis-stats .cartelera-stat-info strong {
+  font-size: 15px;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.cartelera-stats-bar.cinepolis-stats .cartelera-stat-info span {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* 5. Filtros de Categoría y Buscador */
+.cartelera-filter-controls.cinepolis-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.cartelera-filter-controls.cinepolis-filters .cartelera-tabs {
+  display: inline-flex;
+  background: rgba(12, 22, 48, 0.85);
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(34, 53, 98, 0.8);
+  gap: 4px;
+}
+
+.cartelera-filter-controls.cinepolis-filters .cartelera-tab {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.cartelera-filter-controls.cinepolis-filters .cartelera-tab:hover {
+  color: #ffffff;
+}
+
+.cartelera-filter-controls.cinepolis-filters .cartelera-tab.is-active {
+  background: rgba(255, 184, 0, 0.15);
+  color: #ffb800;
+  border: 1px solid rgba(255, 184, 0, 0.4);
+}
+
+.cartelera-filter-controls.cinepolis-filters .cartelera-tab.tab-watched.is-active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.cartelera-search-box.cinepolis-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 280px;
+}
+
+.cartelera-search-box.cinepolis-search .cartelera-search-icon {
+  position: absolute;
+  left: 14px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.cartelera-search-box.cinepolis-search .cartelera-search-input {
+  width: 100%;
+  padding: 9px 36px 9px 38px;
+  border-radius: 24px;
+  border: 1px solid rgba(34, 53, 98, 0.8);
+  background: rgba(12, 22, 48, 0.85);
+  color: #ffffff;
+  font-size: 13.5px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.cartelera-search-box.cinepolis-search .cartelera-search-input::placeholder {
+  color: #64748b;
+}
+
+.cartelera-search-box.cinepolis-search .cartelera-search-input:focus {
+  border-color: #ffb800;
+  box-shadow: 0 0 0 3px rgba(255, 184, 0, 0.2);
+}
+
+.cartelera-search-box.cinepolis-search .cartelera-search-clear {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 2px;
+}
+
+/* 6. Cuadrícula de Películas Estilo Cartelera de Cinépolis */
+.cartelera-grid.cinepolis-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.cinepolis-card {
+  display: flex;
+  flex-direction: column;
+  background: #0e1935;
+  border-radius: 20px;
+  border: 1px solid rgba(34, 53, 98, 0.85);
+  overflow: hidden;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+  transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.2, 0, 0.2, 1), border-color 0.3s ease;
+  position: relative;
+}
+
+.cinepolis-card:hover {
+  transform: translateY(-6px);
+  border-color: rgba(255, 184, 0, 0.45);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.65), 0 0 25px rgba(255, 184, 0, 0.12);
+}
+
+.cinepolis-card.is-watched {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+/* Póster Cinépolis */
+.cinepolis-poster-container {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  background: #040916;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.cinepolis-poster-container::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(7, 13, 30, 0.65) 0%,
+    rgba(7, 13, 30, 0) 25%,
+    rgba(7, 13, 30, 0) 65%,
+    rgba(7, 13, 30, 0.95) 100%
+  );
+  z-index: 1;
+}
+
+.cinepolis-poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transition: transform 0.45s cubic-bezier(0.2, 0, 0.2, 1);
+  display: block;
+}
+
+.cinepolis-card:hover .cinepolis-poster-img {
+  transform: scale(1.05);
+}
+
+.cinepolis-poster-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #64748b;
+  background: linear-gradient(135deg, #070d1e 0%, #172856 100%);
+  padding: 20px;
+  text-align: center;
+}
+
+/* Badges sobre el póster */
+.cinepolis-badge-top-left {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+}
+
+.cinepolis-clasif-pill {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.9);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(8px);
+}
+
+.cinepolis-clasif-pill.clasif-a {
+  background: #059669;
+  border-color: #10b981;
+}
+
+.cinepolis-clasif-pill.clasif-b {
+  background: #d97706;
+  border-color: #f59e0b;
+}
+
+.cinepolis-clasif-pill.clasif-b15 {
+  background: #dc2626;
+  border-color: #ef4444;
+}
+
+.cinepolis-clasif-pill.clasif-vip {
+  background: linear-gradient(135deg, #ffb800 0%, #e6a100 100%);
+  color: #070d1e;
+  border: none;
+}
+
+.cinepolis-format-pill {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(14, 165, 233, 0.25);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  backdrop-filter: blur(8px);
+}
+
+.cinepolis-badge-top-right {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+}
+
+.cinepolis-status-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.cinepolis-status-tag.tag-pending {
+  background: rgba(255, 184, 0, 0.2);
+  color: #ffb800;
+  border: 1px solid rgba(255, 184, 0, 0.5);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.cinepolis-status-tag.tag-watched {
+  background: rgba(16, 185, 129, 0.25);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+}
+
+.cinepolis-poster-hover-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(7, 13, 30, 0.7);
+  color: #ffb800;
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  z-index: 2;
+}
+
+.cinepolis-card:hover .cinepolis-poster-hover-hint {
+  opacity: 1;
+}
+
+/* Contenido de la Ficha Cinépolis */
+.cinepolis-card-content {
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 10px;
+}
+
+.cinepolis-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.cinepolis-dot {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.cinepolis-lang {
+  color: #38bdf8;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.cinepolis-movie-title {
+  font-size: 19px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.cinepolis-movie-title:hover {
+  color: #ffb800;
+}
+
+.cinepolis-actors {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.cinepolis-star-icon {
+  color: #ffb800;
+  flex-shrink: 0;
+}
+
+.cinepolis-synopsis-box {
+  background: rgba(7, 13, 30, 0.65);
+  border-left: 3px solid #ffb800;
+  padding: 8px 12px;
+  border-radius: 0 10px 10px 0;
+  margin-top: 2px;
+}
+
+.cinepolis-synopsis-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #ffb800;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.cinepolis-synopsis-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #cbd5e1;
+  font-style: italic;
+  margin: 0;
+}
+
+.cinepolis-programmer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.cinepolis-sparkle {
+  color: #ffb800;
+}
+
+.cinepolis-programmer-row strong {
+  color: #ffffff;
+}
+
+/* Horarios de Cine Cinépolis */
+.cinepolis-showtimes-section {
+  background: rgba(7, 13, 30, 0.5);
+  border: 1px solid rgba(34, 53, 98, 0.7);
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-top: 4px;
+}
+
+.cinepolis-showtimes-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #ffb800;
+  margin-bottom: 8px;
+}
+
+.cinepolis-showtimes-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.cinepolis-showtime-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 4px;
+  background: rgba(18, 32, 68, 0.85);
+  border: 1px solid rgba(34, 53, 98, 0.85);
+  border-radius: 8px;
+  color: #f1f5f9;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cinepolis-showtime-btn:hover {
+  background: #ffb800;
+  color: #070d1e;
+  border-color: #ffb800;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 184, 0, 0.3);
+}
+
+.cinepolis-showtime-btn.is-reserved {
+  background: linear-gradient(135deg, rgba(255, 184, 0, 0.28) 0%, rgba(255, 138, 0, 0.35) 100%);
+  border-color: #ffb800;
+  color: #ffdf79;
+  box-shadow: 0 0 12px rgba(255, 184, 0, 0.35);
+}
+
+.cinepolis-showtime-btn.is-reserved .showtime-hour {
+  color: #ffffff;
+}
+
+.showtime-format {
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0.8;
+  letter-spacing: 0.5px;
+}
+
+.showtime-hour {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+/* Insignia de reservación en la tarjeta */
+.cinepolis-card-reservation-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 184, 0, 0.12);
+  border: 1px solid rgba(255, 184, 0, 0.35);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #ffdf79;
+  margin-top: 8px;
+}
+
+.cinepolis-card-reservation-badge strong {
+  color: #ffffff;
+}
+
+/* Botones de Acción de Tarjeta */
+.cinepolis-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(34, 53, 98, 0.7);
+}
+
+.cinepolis-btn-ticket {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 1;
+  background: rgba(255, 184, 0, 0.15);
+  color: #ffb800;
+  border: 1px solid rgba(255, 184, 0, 0.4);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cinepolis-btn-ticket:hover {
+  background: #ffb800;
+  color: #070d1e;
+}
+
+.cinepolis-btn-ticket.has-reservation {
+  background: linear-gradient(135deg, #ffb800 0%, #ff8a00 100%);
+  color: #040916;
+  border-color: #ffb800;
+  box-shadow: 0 4px 14px rgba(255, 184, 0, 0.35);
+}
+
+.cinepolis-btn-ticket.has-reservation:hover {
+  background: linear-gradient(135deg, #ffc526 0%, #ff981a 100%);
+  color: #040916;
+}
+
+.cinepolis-btn-watched {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.cinepolis-btn-watched.is-pending {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.cinepolis-btn-watched.is-pending:hover {
+  background: rgba(255, 184, 0, 0.2);
+  color: #ffb800;
+  border-color: rgba(255, 184, 0, 0.4);
+}
+
+.cinepolis-btn-watched.is-watched {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.cinepolis-btn-delete {
+  background: none;
+  border: 1px solid transparent;
+  color: #64748b;
+  padding: 7px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.cinepolis-btn-delete:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* 7. MODAL BOLETO DE CINE CINÉPOLIS VIP (TICKET STUB) */
+.cinepolis-ticket-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 9, 25, 0.85);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.cinepolis-ticket-card {
+  position: relative;
+  width: 100%;
+  max-width: 580px;
+  background: #081024;
+  border-radius: 24px;
+  border: 2px solid rgba(255, 184, 0, 0.4);
+  box-shadow: 0 25px 70px rgba(0, 0, 0, 0.8), 0 0 40px rgba(255, 184, 0, 0.15);
+  color: #ffffff;
+  overflow: hidden;
+  animation: scaleUp 0.25s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.cinepolis-ticket-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #cbd5e1;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.cinepolis-ticket-close:hover {
+  background: #ffb800;
+  color: #070d1e;
+}
+
+.cinepolis-ticket-header {
+  background: linear-gradient(90deg, #0e1c42 0%, #15275e 100%);
+  padding: 20px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 184, 0, 0.2);
+}
+
+.cinepolis-ticket-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cinepolis-ticket-stars {
+  color: #ffb800;
+  font-size: 11px;
+  letter-spacing: 2px;
+}
+
+.cinepolis-ticket-brand strong {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #ffffff;
+}
+
+.cinepolis-ticket-brand span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #ffb800;
+}
+
+.cinepolis-ticket-room-badge {
+  background: #ffb800;
+  color: #070d1e;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 6px 14px;
+  border-radius: 20px;
+  letter-spacing: 1px;
+}
+
+.cinepolis-ticket-body {
+  padding: 22px 24px;
+  display: flex;
+  gap: 20px;
+}
+
+.cinepolis-ticket-poster-wrap {
+  width: 130px;
+  aspect-ratio: 2 / 3;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 184, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.cinepolis-ticket-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cinepolis-ticket-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+
+.cinepolis-ticket-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.cinepolis-ticket-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cinepolis-ticket-format {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  background: rgba(56, 189, 248, 0.2);
+  color: #38bdf8;
+  border-radius: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.cinepolis-ticket-clasif {
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  background: rgba(255, 184, 0, 0.2);
+  color: #ffb800;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 184, 0, 0.4);
+}
+
+.cinepolis-ticket-year {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.cinepolis-ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px 12px;
+  background: rgba(14, 25, 53, 0.6);
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 53, 98, 0.7);
+}
+
+.ticket-field {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ticket-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  color: #64748b;
+}
+
+.ticket-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.ticket-value.highlight-gold {
+  color: #ffb800;
+  font-weight: 700;
+}
+
+/* Selector de Horario en Boleto */
+.ticket-showtime-picker-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(10, 18, 38, 0.7);
+  border: 1px solid rgba(255, 184, 0, 0.25);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.ticket-showtime-buttons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+  max-height: 125px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.ticket-time-btn {
+  background: rgba(18, 32, 68, 0.85);
+  border: 1px solid rgba(34, 53, 98, 0.9);
+  color: #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.ticket-time-btn:hover {
+  border-color: #ffb800;
+  color: #ffb800;
+}
+
+.ticket-time-btn.is-active {
+  background: linear-gradient(135deg, #ffb800 0%, #ffa000 100%);
+  color: #070d1e;
+  border-color: #ffb800;
+  box-shadow: 0 4px 12px rgba(255, 184, 0, 0.35);
+}
+
+.ticket-custom-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 184, 0, 0.2);
+}
+
+.ticket-custom-time-input {
+  flex: 1;
+  background: rgba(18, 32, 68, 0.9);
+  border: 1px solid rgba(255, 184, 0, 0.35);
+  color: #ffffff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.ticket-custom-time-input:focus {
+  border-color: #ffb800;
+  box-shadow: 0 0 0 2px rgba(255, 184, 0, 0.2);
+}
+
+.ticket-custom-time-btn {
+  background: rgba(255, 184, 0, 0.2);
+  color: #ffdf79;
+  border: 1px solid rgba(255, 184, 0, 0.4);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.ticket-custom-time-btn:hover:not(:disabled) {
+  background: #ffb800;
+  color: #070d1e;
+}
+
+.ticket-custom-time-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Sección de compartir / descargar boleto */
+.ticket-share-section {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.ticket-share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  flex: 1;
+  min-width: 140px;
+}
+
+.ticket-share-btn.primary {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.ticket-share-btn.primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  transform: translateY(-1px);
+}
+
+.ticket-share-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.ticket-share-btn.secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 184, 0, 0.5);
+  color: #ffb800;
+}
+
+.ticket-share-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.ticket-share-btn-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: #34d399;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ticket-share-btn-compact:hover {
+  background: rgba(16, 185, 129, 0.28);
+  color: #ffffff;
+}
+
+.ticket-share-notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #34d399;
+  margin: 6px 0 0;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.cinepolis-showtime-btn.more-times-btn {
+  background: rgba(255, 184, 0, 0.12);
+  border-color: rgba(255, 184, 0, 0.4);
+  color: #ffdf79;
+}
+
+.cinepolis-showtime-btn.more-times-btn:hover {
+  background: #ffb800;
+  color: #070d1e;
+}
+
+/* Caja de Reservación de Función de Boleto */
+.cinepolis-ticket-booking-box {
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(7, 13, 28, 0.75);
+  border: 1px solid rgba(255, 184, 0, 0.25);
+}
+
+.booking-status.confirmed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.booking-status-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #10b981;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.booking-status.confirmed p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: #e2e8f0;
+}
+
+.booking-status.confirmed .highlight-gold {
+  color: #ffb800;
+  font-weight: 700;
+}
+
+.booking-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.booking-btn-change {
+  background: rgba(255, 184, 0, 0.2);
+  color: #ffdf79;
+  border: 1px solid rgba(255, 184, 0, 0.4);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.booking-btn-change:hover {
+  background: #ffb800;
+  color: #050a17;
+}
+
+.booking-btn-cancel {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.booking-btn-cancel:hover {
+  background: rgba(239, 68, 68, 0.35);
+  color: #ffffff;
+}
+
+.booking-status.prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: center;
+}
+
+.booking-status.prompt p {
+  margin: 0;
+  font-size: 12.5px;
+  color: #cbd5e1;
+}
+
+.booking-status.prompt strong {
+  color: #ffb800;
+}
+
+.booking-btn-reserve {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: linear-gradient(135deg, #ffb800 0%, #ff8a00 100%);
+  color: #040916;
+  border: none;
+  font-weight: 800;
+  font-size: 13px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(255, 184, 0, 0.35);
+  transition: all 0.2s ease;
+}
+
+.booking-btn-reserve:hover {
+  background: linear-gradient(135deg, #ffc526 0%, #ff981a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(255, 184, 0, 0.5);
+}
+
+.cinepolis-ticket-note {
+  background: rgba(255, 184, 0, 0.08);
+  border-left: 2px solid #ffb800;
+  padding: 6px 10px;
+  border-radius: 0 8px 8px 0;
+}
+
+.cinepolis-ticket-note p {
+  font-size: 12px;
+  font-style: italic;
+  color: #cbd5e1;
+  margin: 2px 0 0;
+  line-height: 1.4;
+}
+
+/* Perforación de boleto estilo cine */
+.cinepolis-ticket-perforations {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.cinepolis-ticket-perforations .notch {
+  width: 24px;
+  height: 24px;
+  background: rgba(4, 9, 25, 0.85);
+  border-radius: 50%;
+  position: absolute;
+  top: 0;
+  border: 2px solid rgba(255, 184, 0, 0.4);
+}
+
+.cinepolis-ticket-perforations .notch-left {
+  left: -12px;
+}
+
+.cinepolis-ticket-perforations .notch-right {
+  right: -12px;
+}
+
+.cinepolis-ticket-perforations .dashed-line {
+  flex: 1;
+  margin: 0 20px;
+  border-bottom: 2px dashed rgba(255, 184, 0, 0.35);
+}
+
+.cinepolis-ticket-footer {
+  padding: 16px 24px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.cinepolis-barcode-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cinepolis-barcode-lines {
+  width: 180px;
+  height: 34px;
+  background: repeating-linear-gradient(
+    90deg,
+    #ffffff,
+    #ffffff 2px,
+    transparent 2px,
+    transparent 5px,
+    #ffffff 5px,
+    #ffffff 8px,
+    transparent 8px,
+    transparent 10px,
+    #ffffff 10px,
+    #ffffff 11px,
+    transparent 11px,
+    transparent 13px,
+    #ffffff 13px,
+    #ffffff 17px
+  );
+  opacity: 0.9;
+}
+
+.cinepolis-barcode-number {
+  font-family: monospace;
+  font-size: 10.5px;
+  letter-spacing: 2px;
+  color: #94a3b8;
+}
+
+.cinepolis-ticket-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.cinepolis-ticket-action-btn.is-pending {
+  background: #ffb800;
+  color: #070d1e;
+  box-shadow: 0 4px 14px rgba(255, 184, 0, 0.4);
+}
+
+.cinepolis-ticket-action-btn.is-pending:hover {
+  background: #ffc425;
+}
+
+.cinepolis-ticket-action-btn.is-watched {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+/* 8. Formularios y Buscador IMDb en Modal */
+.cartelera-form.cinepolis-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cartelera-search-field-wrap.cinepolis-form-search {
+  background: rgba(14, 25, 53, 0.5);
+  border: 1px solid rgba(255, 184, 0, 0.2);
+  padding: 16px;
+  border-radius: 16px;
+}
+
+/* Estado Vacío Cinépolis */
+.cartelera-empty-state.cinepolis-empty {
+  text-align: center;
+  padding: 56px 20px;
+  background: rgba(12, 22, 48, 0.6);
+  border: 2px dashed rgba(255, 184, 0, 0.25);
+  border-radius: 24px;
+  margin: 20px 0;
+  position: relative;
+  z-index: 1;
+}
+
+.cartelera-empty-state.cinepolis-empty .cartelera-empty-icon {
+  color: #ffb800;
+  margin-bottom: 16px;
+  opacity: 0.9;
+}
+
+.cartelera-empty-state.cinepolis-empty h3 {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0 0 8px;
+}
+
+.cartelera-empty-state.cinepolis-empty p {
+  color: #94a3b8;
+  font-size: 14.5px;
+  margin: 0 0 20px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 800px) {
+  .cartelera-page.cinepolis-theme {
+    padding: 14px 14px 50px;
+    border-radius: 20px;
+  }
+  .cartelera-stats-bar.cinepolis-stats {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .cartelera-grid.cinepolis-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 18px;
+  }
+  .cinepolis-ticket-body {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .cinepolis-ticket-poster-wrap {
+    width: 140px;
+  }
+  .cinepolis-ticket-badges-row {
+    justify-content: center;
+  }
+  .cartelera-form-details-layout {
+    grid-template-columns: 1fr;
+  }
+  .cartelera-form-poster-preview {
+    margin: 0 auto;
+  }
+  .random-modal-body {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .random-poster-wrap {
+    width: 120px;
+  }
+  .random-meta-badges {
+    justify-content: center;
+  }
+  .random-stars {
+    justify-content: center;
+  }
+  .random-modal-footer {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 500px) {
+  .cartelera-grid.cinepolis-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+  }
+  .cinepolis-card-content {
+    padding: 12px 10px;
+  }
+  .cinepolis-movie-title {
+    font-size: 15px;
+  }
+  .cinepolis-showtimes-grid {
+    grid-template-columns: 1fr;
+  }
+  .cinepolis-candy-bar {
+    flex-direction: column;
+    text-align: center;
+  }
+  .cinepolis-top-brand-strip {
+    justify-content: center;
+  }
+  .cinepolis-ticket-grid {
+    grid-template-columns: 1fr;
+  }
+  .ticket-showtime-buttons {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 8. MODAL PELÍCULA ALEATORIA (PARA NO ESTAR DE INDECISOS) */
+.cinepolis-random-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 7, 20, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.cinepolis-random-card {
+  background: linear-gradient(180deg, #0e1935 0%, #080f24 100%);
+  border: 1px solid rgba(255, 184, 0, 0.45);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 50px rgba(255, 184, 0, 0.15);
+  border-radius: 24px;
+  max-width: 640px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  animation: modalPopIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.random-modal-header {
+  padding: 24px 28px 16px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 184, 0, 0.2);
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 184, 0, 0.12) 0%, transparent 80%);
+}
+
+.random-sparkles-tag {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #ffb800;
+  background: rgba(255, 184, 0, 0.15);
+  border: 1px solid rgba(255, 184, 0, 0.3);
+  padding: 3px 10px;
+  border-radius: 12px;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.random-modal-title {
+  margin: 0 0 4px 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.3px;
+}
+
+.random-modal-subtitle {
+  margin: 0;
+  font-size: 13.5px;
+  color: #ffdf79;
+}
+
+.random-modal-body {
+  padding: 24px 28px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.random-poster-wrap {
+  width: 130px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 184, 0, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  aspect-ratio: 2 / 3;
+  background: #040916;
+}
+
+.random-movie-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.random-poster-placeholder {
+  width: 130px;
+  height: 195px;
+  border-radius: 12px;
+  background: #040916;
+  border: 1px solid rgba(255, 184, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffb800;
+  flex-shrink: 0;
+}
+
+.random-movie-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.random-meta-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.random-year-pill,
+.random-duration-pill {
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.random-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.3;
+}
+
+.random-stars {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  font-size: 12.5px;
+  color: #ffdf79;
+}
+
+.random-synopsis {
+  background: rgba(255, 184, 0, 0.08);
+  border-left: 2px solid #ffb800;
+  padding: 8px 12px;
+  border-radius: 0 8px 8px 0;
+}
+
+.random-synopsis strong {
+  display: block;
+  font-size: 9.5px;
+  letter-spacing: 0.8px;
+  color: #ffb800;
+  margin-bottom: 2px;
+}
+
+.random-synopsis p {
+  margin: 0;
+  font-size: 12.5px;
+  font-style: italic;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.random-programmer {
+  margin: 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.random-programmer strong {
+  color: #ffffff;
+}
+
+.random-modal-footer {
+  padding: 16px 28px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid rgba(255, 184, 0, 0.15);
+  background: rgba(6, 12, 26, 0.6);
+  flex-wrap: wrap;
+}
+
+.random-btn-roll-again {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 10px 18px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.random-btn-roll-again:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+}
+
+.random-btn-accept {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: linear-gradient(135deg, #ffb800 0%, #ff8a00 100%);
+  color: #040916;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 20px;
+  font-size: 13.5px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(255, 184, 0, 0.35);
+  transition: all 0.2s ease;
+}
+
+.random-btn-accept:hover {
+  background: linear-gradient(135deg, #ffc526 0%, #ff981a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(255, 184, 0, 0.5);
+}

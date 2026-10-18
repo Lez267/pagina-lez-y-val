@@ -1,4 +1,4 @@
-export type PuzzleSize = 3 | 4;
+export type PuzzleSize = 3 | 4 | 5;
 export type PuzzleState = { tiles: number[]; moves: number; hints: number; history: number[][] };
 
 export function solvedTiles(size: PuzzleSize): number[] {

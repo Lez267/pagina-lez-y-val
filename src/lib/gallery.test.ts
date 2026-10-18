@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { galleryAlbums, galleryOnThisDay, galleryToday, galleryWithCoverFirst, nextGalleryReminder, recentGalleryStories, upcomingGalleryReminders, validateGalleryFiles, type GalleryMemory, type GalleryReminder } from './gallery';
+import { galleryAlbums, galleryOnThisDay, galleryToday, galleryWithCoverFirst, isAleFavoriteMemory, isValFavoriteMemory, nextGalleryReminder, recentGalleryStories, upcomingGalleryReminders, validateGalleryFiles, type GalleryMemory, type GalleryReminder } from './gallery';
 
 const memory = (id: string, extra: Partial<GalleryMemory> = {}): GalleryMemory => ({ id, title: id, description: '', date: '2025-10-17', location: '', tags: [], album: '', author: 'Ale', media: [], favorites: [], source: 'demo', ...extra });
 test('calendar dates use Mexico City rather than the host time zone', () => {
@@ -43,3 +43,22 @@ test('file preparation rejects SVG, oversized videos and excessive aggregate siz
   assert.ok(validateGalleryFiles([{ name: 'large.mp4', type: 'video/mp4', size: 101 * 1024 * 1024 }]).length);
   assert.deepEqual(validateGalleryFiles([{ name: 'photo.jpg', type: 'image/jpeg', size: 1000 }, { name: 'video.mp4', type: 'video/mp4', size: 1000 }]), []);
 });
+test('isAleFavoriteMemory and isValFavoriteMemory classify favorites correctly', () => {
+  const aleMem = memory('1', { favorites: ['Ale'] });
+  const valMem = memory('2', { favorites: ['Valeria'] });
+  const bothMem = memory('3', { favorites: ['Ale', 'Val'] });
+  const noneMem = memory('4', { favorites: [] });
+
+  assert.equal(isAleFavoriteMemory(aleMem), true);
+  assert.equal(isValFavoriteMemory(aleMem), false);
+
+  assert.equal(isAleFavoriteMemory(valMem), false);
+  assert.equal(isValFavoriteMemory(valMem), true);
+
+  assert.equal(isAleFavoriteMemory(bothMem), true);
+  assert.equal(isValFavoriteMemory(bothMem), true);
+
+  assert.equal(isAleFavoriteMemory(noneMem), false);
+  assert.equal(isValFavoriteMemory(noneMem), false);
+});
+

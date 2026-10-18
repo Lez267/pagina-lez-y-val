@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { connectedStudioUid, createStudioRecord, localStudioRecords, mergeStudioRecords, prepareStudioDraft, setSharedPlanDone, sharedDraftId, studioError, watchStudio, type SharedStudio, type StudioAuthor, type StudioCollection, type StudioPlan, type StudioRecords } from '../data/studio-sync';
+import { connectedStudioUid, createStudioRecord, localStudioRecords, mergeStudioRecords, prepareStudioDraft, setSharedPlanDone, sharedDraftId, studioError, updateSharedPlan, watchStudio, type SharedStudio, type StudioAuthor, type StudioCollection, type StudioPlan, type StudioRecords } from '../data/studio-sync';
 
 export function useStudioSync<K extends StudioCollection>(namespace: string, kind: K, rawLocal: unknown) {
   const connected = connectedStudioUid(namespace) !== null;
@@ -49,5 +49,9 @@ export function useStudioSync<K extends StudioCollection>(namespace: string, kin
     if (kind !== 'plans') return Promise.resolve(false);
     return perform(async () => await setSharedPlanDone(namespace, item.id, !item.done) as unknown as SharedStudio<StudioRecords[K]>);
   }
-  return { connected, rows, state, error, busy, share, togglePlan, clearError: () => setError(''), exportData: { version: 2, local: rawLocal, shared, view: rows, synchronization: state } };
+  function updatePlan(item: StudioPlan) {
+    if (kind !== 'plans') return Promise.resolve(false);
+    return perform(async () => await updateSharedPlan(namespace, item) as unknown as SharedStudio<StudioRecords[K]>);
+  }
+  return { connected, rows, state, error, busy, share, togglePlan, updatePlan, clearError: () => setError(''), exportData: { version: 2, local: rawLocal, shared, view: rows, synchronization: state } };
 }

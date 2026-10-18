@@ -164,3 +164,19 @@ export async function setSharedPlanDone(namespace: string, id: string, done: boo
   if (!confirmed.exists()) throw new Error('No pudimos confirmar el cambio del plan.');
   return parseSharedStudio('plans', confirmed.id, confirmed.data());
 }
+export async function updateSharedPlan(namespace: string, plan: StudioPlan): Promise<SharedStudio<StudioPlan>> {
+  const desired = validateStudioDraft('plans', plan);
+  const { db } = context(namespace); const ref = doc(db, 'plans', desired.id);
+  await updateDoc(ref, {
+    title: desired.title,
+    category: desired.category,
+    date: desired.date,
+    note: desired.note,
+    author: desired.author,
+    updatedAt: serverTimestamp(),
+  });
+  context(namespace);
+  const confirmed = await getDocFromServer(ref); context(namespace);
+  if (!confirmed.exists()) throw new Error('No pudimos confirmar la edición del plan.');
+  return parseSharedStudio('plans', confirmed.id, confirmed.data());
+}
