@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import '../src/styles.css';
 
 export const metadata: Metadata = {
@@ -8,6 +8,13 @@ export const metadata: Metadata = {
   icons: { icon: '/icon.svg', apple: '/icon-192.png' },
 };
 
+export const viewport: Viewport = {
+  themeColor: '#faf7f2',
+  width: 'device-width',
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return <html lang="es"><body>{children}</body></html>;
 }
+

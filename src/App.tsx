@@ -46,7 +46,12 @@ const ROMANTIC_PARTICLES = [
 ];
 
 const isPage = (page: string): page is Page => navigation.some(item => item.id === page);
-const pageFromHash = () => { const hash = window.location.hash.slice(1); return isPage(hash) ? hash : 'home'; };
+const pageFromHash = (): Page => {
+  if (typeof window === 'undefined') return 'home';
+  const hash = window.location.hash.slice(1);
+  return isPage(hash) ? hash : 'home';
+};
+
 
 function HomePage({ memories, navigate, example }: { memories: Memory[]; navigate: (page: Page) => void; example: boolean }) {
   const [selected, setSelected] = useState<Memory | null>(null);
@@ -219,6 +224,8 @@ export default function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const operation = useRef(0);
   const operationKind = useRef<'google' | 'import' | null>(null);
+  const isFirstMount = useRef(true);
+
 
   const memories = session?.memories ?? imported ?? demoMemories;
   const example = !session && imported === null;
@@ -254,9 +261,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      document.title = `${navigation.find(item => item.id === page)?.label} · Ale & Val`;
+      return;
+    }
     window.scrollTo({ top: 0, behavior: 'instant' });
     document.title = `${navigation.find(item => item.id === page)?.label} · Ale & Val`;
   }, [page]);
+
 
   useEffect(() => {
     if (!toast) return;
