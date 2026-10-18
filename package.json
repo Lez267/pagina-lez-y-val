@@ -8,8 +8,8 @@
   "scripts": {
     "install:ci": "node scripts/install-ci.mjs",
     "dev": "node scripts/run-framework.mjs dev",
-    "build": "tsc --noEmit && node scripts/run-framework.mjs build && node scripts/generate-sw.mjs",
-    "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
+    "build": "next build && node scripts/generate-sw.mjs",
+    "start": "next start",
     "test": "node --import tsx --test tests/*.test.ts src/lib/gallery.test.ts server/security.test.mjs"
   },
   "dependencies": {

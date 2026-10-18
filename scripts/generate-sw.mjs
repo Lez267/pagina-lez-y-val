@@ -27,4 +27,7 @@ self.addEventListener('fetch',event=>{
 });
 `;
 fs.writeFileSync(path.join(root,'sw.js'),source);
+if (fs.existsSync('public')) {
+  fs.writeFileSync(path.join('public', 'sw.js'), source);
+}
 console.log('PWA: cached static interface and example images only; no gallery records or remote photos.');
