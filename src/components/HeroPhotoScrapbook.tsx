@@ -194,6 +194,7 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
+    if (typeof window !== 'undefined' && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width - 0.5;
     const y = (e.clientY - rect.top) / rect.height - 0.5;
@@ -203,6 +204,9 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
   const handleMouseLeave = useCallback(() => {
     mouseTarget.current = { x: 0, y: 0 };
   }, []);
+
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const isTouchDevice = useRef(false);
 
   // Interacción al hacer clic: juntar, barajar fotos y volver a dispersar garantizando publicaciones distintas
   const triggerReshuffle = useCallback(() => {
@@ -229,6 +233,36 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
     }, 280);
   }, [isReshuffling, photoPool]);
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    isTouchDevice.current = true;
+    const t = e.touches[0];
+    if (t) touchStartPos.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartPos.current) return;
+    const t = e.changedTouches[0];
+    if (t) {
+      const dx = Math.abs(t.clientX - touchStartPos.current.x);
+      const dy = Math.abs(t.clientY - touchStartPos.current.y);
+      // Si el usuario movió el dedo más de 10px, fue un gesto de scroll, NO un tap
+      if (dx > 10 || dy > 10) {
+        touchStartPos.current = null;
+        return;
+      }
+    }
+    touchStartPos.current = null;
+    triggerReshuffle();
+  };
+
+  const handleClick = () => {
+    if (isTouchDevice.current) {
+      isTouchDevice.current = false;
+      return;
+    }
+    triggerReshuffle();
+  };
+
   const frontItem = photoPool[frontIndex] || photoPool[0];
   const backItem = photoPool[backIndex] || photoPool[1] || photoPool[0];
 
@@ -238,12 +272,14 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
       className={`hero-art hero-art-gn-space ${isReshuffling ? (isScattered ? 'is-scattered' : 'is-stacked') : 'is-ready'}`}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-
-      onClick={triggerReshuffle}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onClick={handleClick}
       title="Toca para juntar y barajar nuestras fotos ♡"
       role="region"
       aria-label="Álbum fotográfico de nuestros recuerdos"
     >
+
       {/* Auria y brillos ambientales de fondo */}
       <div className="hero-aura aura-one" />
       <div className="hero-aura aura-two" />

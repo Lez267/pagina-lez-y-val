@@ -72,14 +72,20 @@
   box-sizing: border-box;
 }
 
-body {
+html, body {
   margin: 0;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
   min-width: 320px;
   background-color: var(--bg-page);
   color: var(--ink);
   font-size: 15px;
   line-height: 1.6;
 }
+
 
 button, input, select, textarea {
   font: inherit;
@@ -169,8 +175,9 @@ h1, h2, h3, h4, p {
     radial-gradient(circle at 90% 8%, rgba(246, 225, 232, 0.45) 0%, transparent 45%),
     radial-gradient(circle at 10% 70%, rgba(241, 245, 238, 0.5) 0%, transparent 50%),
     var(--bg-page);
-  overflow-x: clip;
+  overflow-x: hidden;
 }
+
 
 
 .ambient-garden {
@@ -326,7 +333,13 @@ h1, h2, h3, h4, p {
   animation-name: floatSway;
   animation-iteration-count: infinite;
   animation-timing-function: ease-in-out;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
+
 
 .magic-off .romantic-particle {
   display: none !important;
@@ -358,6 +371,9 @@ h1, h2, h3, h4, p {
   max-width: 1220px;
   margin: 14px auto 0;
   padding: 0 20px;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .nav-container {
@@ -366,13 +382,18 @@ h1, h2, h3, h4, p {
   justify-content: space-between;
   gap: 16px;
   padding: 8px 18px;
-  background: rgba(255, 253, 250, 0.9);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: rgba(255, 253, 250, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(232, 223, 216, 0.85);
   border-radius: 9999px;
   box-shadow: 0 10px 30px -10px rgba(43, 29, 36, 0.08);
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
+
 
 .brand {
   display: inline-flex;
@@ -3001,17 +3022,41 @@ h1, h2, h3, h4, p {
 
 @media (max-width: 860px) {
   .hero-art-gn-space {
-    perspective: none;
-    -webkit-perspective: none;
+    perspective: none !important;
+    -webkit-perspective: none !important;
   }
   .hero-polaroid-stage {
     transform: none !important;
-    transform-style: flat;
-    -webkit-transform-style: flat;
+    transform-style: flat !important;
+    -webkit-transform-style: flat !important;
+  }
+  .polaroid-back {
+    transform: rotate(-7deg) !important;
+  }
+  .polaroid-front {
+    transform: rotate(4deg) !important;
+  }
+  .love-stamp {
+    transform: rotate(10deg) !important;
+  }
+  .handwritten-note {
+    transform: rotate(-5deg) !important;
   }
   .main-content > * {
     animation: none;
   }
+
+  /* Optimización GPU para scroll móvil: elimina drop-shadows y animaciones pesadas de fondo */
+  .ambient-cloud {
+    filter: none !important;
+    opacity: 0.3 !important;
+    animation: none !important;
+  }
+  .hero-aura {
+    filter: blur(20px) !important;
+    opacity: 0.35 !important;
+  }
+
   .desktop-nav {
     display: none;
   }
@@ -3021,13 +3066,18 @@ h1, h2, h3, h4, p {
     margin-right: 2px;
   }
   .site-header {
-    margin-top: 10px;
+    top: 8px;
+    margin-top: 8px;
     padding: 0 12px;
   }
   .nav-container {
     padding: 6px 12px;
     gap: 8px;
+    background: rgba(255, 253, 250, 0.96);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
+
   .brand {
     padding: 4px 6px;
   }
