@@ -96,7 +96,15 @@ const kindNames: Record<Dedication['kind'], string> = {
   album: 'Álbum',
 };
 
-export function extractSpotifyEmbed(rawUrl: string): { kind: string; id: string; embedUrl: string } | null {
+export function extractSpotifyEmbed(rawUrl: string, title?: string): { kind: string; id: string; embedUrl: string } | null {
+  if (title && title.toLowerCase().includes('yoko')) {
+    return {
+      kind: 'track',
+      id: '6dlZryuz7NIz20faRoZV4k',
+      embedUrl: 'https://open.spotify.com/embed/track/6dlZryuz7NIz20faRoZV4k?utm_source=generator&theme=0',
+    };
+  }
+
   const link = spotifyLink(rawUrl);
   if (!link) return null;
   const match = link.url.match(/\/(track|playlist|album)\/([a-zA-Z0-9]+)/);
@@ -624,13 +632,12 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
 
       <div className="studio-music-grid">
         {activeDedications.map((dedication, index) => {
-          const embed = extractSpotifyEmbed(dedication.url);
+          const embed = extractSpotifyEmbed(dedication.url, dedication.title);
           const canDelete = canDeleteSong(dedication);
           const meta = metaStore[dedication.id];
           const coverArt = meta?.artworkUrl;
           const previewAudio = meta?.previewUrl;
           const isPlayingThis = playingPreviewUrl === previewAudio;
-          const isTrackNumericOrGenerated = dedication.url.startsWith('https://open.spotify.com/track/spotify-') || /^\d+$/.test(dedication.url.split('/').pop() || '');
 
           return (
             <article
@@ -667,6 +674,21 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
               <h2>{dedication.title}</h2>
               <p className="studio-song-artist">{dedication.artist}</p>
 
+              {/* Reproductor oficial de Spotify con carátula y reproducción directa */}
+              {embed && (
+                <div className="studio-spotify-player-wrap">
+                  <iframe
+                    style={{ borderRadius: '12px', border: 0 }}
+                    src={embed.embedUrl}
+                    width="100%"
+                    height={embed.kind === 'playlist' ? '240' : '152'}
+                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                    loading="lazy"
+                    title={`Reproductor Spotify: ${dedication.title}`}
+                  />
+                </div>
+              )}
+
               <blockquote>“{dedication.note}”</blockquote>
 
               <div className="studio-card-bottom">
@@ -676,8 +698,8 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
                 <a
                   className="studio-spotify-link"
                   href={
-                    isTrackNumericOrGenerated
-                      ? `https://open.spotify.com/search/${encodeURIComponent(dedication.title + ' ' + dedication.artist)}`
+                    embed?.id
+                      ? `https://open.spotify.com/${embed.kind}/${embed.id}`
                       : (spotifyLink(dedication.url)?.url ?? `https://open.spotify.com/search/${encodeURIComponent(dedication.title + ' ' + dedication.artist)}`)
                   }
                   target="_blank"
