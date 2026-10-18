@@ -195,6 +195,37 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
     };
   }, [selectedSong?.previewUrl]);
 
+  // Auto-cargar carátula y preview para canciones que no las tengan en metaStore (ej. enlaces directos o sincronizados)
+  useEffect(() => {
+    activeDedications.forEach(async (dedication) => {
+      if (metaStore[dedication.id]?.artworkUrl) return;
+      try {
+        const query = `${dedication.title} ${dedication.artist}`.trim();
+        if (!query) return;
+        const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { results?: any[] };
+        const best = data?.results?.[0];
+        if (best && typeof best.artworkUrl100 === 'string') {
+          const artworkUrl = best.artworkUrl100.replace('100x100bb', '200x200bb');
+          setMetaStore(prev => {
+            if (prev[dedication.id]?.artworkUrl) return prev;
+            return {
+              ...prev,
+              [dedication.id]: {
+                ...prev[dedication.id],
+                artworkUrl,
+                previewUrl: best.previewUrl || prev[dedication.id]?.previewUrl,
+              },
+            };
+          });
+        }
+      } catch {
+        // Silencioso si no hay red
+      }
+    });
+  }, [activeDedications, metaStore, setMetaStore]);
+
   // Volumen normal al 100% por defecto para que en la laptop se escuche claro y con volumen completo
   const [previewVolume, setPreviewVolume] = useState<number>(1.0);
 
@@ -635,21 +666,6 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
 
               <h2>{dedication.title}</h2>
               <p className="studio-song-artist">{dedication.artist}</p>
-
-              {/* Reproductor oficial de Spotify con carátula y reproducción directa si tiene embed */}
-              {embed && !isTrackNumericOrGenerated && (
-                <div className="studio-spotify-player-wrap">
-                  <iframe
-                    style={{ borderRadius: '12px', border: 0 }}
-                    src={embed.embedUrl}
-                    width="100%"
-                    height={embed.kind === 'playlist' ? '240' : '152'}
-                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                    loading="lazy"
-                    title={`Reproductor Spotify: ${dedication.title}`}
-                  />
-                </div>
-              )}
 
               <blockquote>“{dedication.note}”</blockquote>
 
