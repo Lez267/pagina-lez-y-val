@@ -24,29 +24,26 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { downloadJson, readLocal, useLocalState } from '../lib/storage';
+import { downloadJson, readLocal, writeLocal, useLocalState } from '../lib/storage';
 import { StudioDialog, studioIsDemo } from './LettersPage';
 import { identifyGooglePlayer } from '../lib/game-progression';
 import type { GallerySession } from '../data/types';
 import type { StudioAuthor } from '../data/studio-sync';
+import {
+  type StudioMovie,
+  type MovieReservation,
+  watchFirestoreMovies,
+  watchFirestoreReservations,
+  saveMovieToFirestore,
+  deleteMovieFromFirestore,
+  saveReservationToFirestore,
+  deleteReservationFromFirestore,
+  batchUploadMoviesToFirestore,
+  batchUploadReservationsToFirestore,
+} from '../data/movies-sync';
+export type { StudioMovie, MovieReservation };
 import './studio.css';
 import './cinepolis.css';
-
-export interface StudioMovie {
-  id: string;
-  title: string;
-  year?: number | string;
-  poster?: string;
-  stars?: string;
-  note: string;
-  author: StudioAuthor;
-  watched: boolean;
-  watchedDate?: string;
-  createdAt: string;
-  duration?: string;
-  classification?: string;
-  format?: string;
-}
 
 export interface IMDbSuggestion {
   id: string;
@@ -54,15 +51,6 @@ export interface IMDbSuggestion {
   year?: number | string;
   stars?: string;
   poster?: string;
-}
-
-export interface MovieReservation {
-  movieId: string;
-  movieTitle: string;
-  poster?: string;
-  dateName: string;
-  showtime: string;
-  reservedAt: string;
 }
 
 export const SHOWTIME_PRESETS = [
@@ -602,6 +590,8 @@ const DATE_OPTIONS = [
 
 export default function MoviesPage({ namespace, session }: { namespace: string; session?: GallerySession | null }) {
   const demo = studioIsDemo(namespace);
+  const isConnected = !!session;
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   // Inicialización: mantiene las películas que el usuario ha guardado.
   // Si no hay ninguna, empieza limpia ([]) para no imponer películas que el usuario no agregó.
@@ -650,6 +640,74 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
     getInitialReservations()
   );
 
+  // Sincronización en tiempo real con Cloud Firestore (Firebase)
+  useEffect(() => {
+    if (!isConnected) return;
+    setCloudSyncStatus('syncing');
+
+    const migratedMoviesKey = `${namespace}:cinepelis-migrated-to-firestore:v1`;
+    const migratedReservationsKey = `${namespace}:cinepelis-reservations-migrated-to-firestore:v1`;
+
+    const unsubMovies = watchFirestoreMovies(
+      (firestoreMovies) => {
+        setCloudSyncStatus('synced');
+        if (firestoreMovies.length > 0) {
+          setMovies(firestoreMovies);
+          writeLocal(migratedMoviesKey, true);
+        } else {
+          // Si Firestore está vacío, migrar automáticamente películas locales si no se ha migrado antes
+          const alreadyMigrated = readLocal<boolean>(migratedMoviesKey, false);
+          if (!alreadyMigrated) {
+            writeLocal(migratedMoviesKey, true);
+            const local = getInitialMovies();
+            if (local.length > 0) {
+              batchUploadMoviesToFirestore(local).catch(err => {
+                console.warn('[MoviesSync] Error migrando cartelera local a Firestore:', err);
+              });
+            }
+          } else {
+            // El usuario legítimamente vació la cartelera
+            setMovies([]);
+          }
+        }
+      },
+      (err) => {
+        console.warn('[MoviesSync] Error cargando películas de Firestore:', err);
+        setCloudSyncStatus('error');
+      }
+    );
+
+    const unsubReservations = watchFirestoreReservations(
+      (firestoreReservations) => {
+        if (Object.keys(firestoreReservations).length > 0) {
+          setReservations(firestoreReservations);
+          writeLocal(migratedReservationsKey, true);
+        } else {
+          const alreadyMigrated = readLocal<boolean>(migratedReservationsKey, false);
+          if (!alreadyMigrated) {
+            writeLocal(migratedReservationsKey, true);
+            const localRes = getInitialReservations();
+            if (Object.keys(localRes).length > 0) {
+              batchUploadReservationsToFirestore(localRes).catch(err => {
+                console.warn('[MoviesSync] Error migrando reservaciones locales a Firestore:', err);
+              });
+            }
+          } else {
+            setReservations({});
+          }
+        }
+      },
+      (err) => {
+        console.warn('[MoviesSync] Error cargando reservaciones de Firestore:', err);
+      }
+    );
+
+    return () => {
+      unsubMovies();
+      unsubReservations();
+    };
+  }, [isConnected, namespace]);
+
   const importFileRef = useRef<HTMLInputElement>(null);
   const handleImportCartelera = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -660,11 +718,18 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
         const parsed = JSON.parse(event.target?.result as string);
         const imported = Array.isArray(parsed) ? parsed : (parsed.movies || parsed.cartelera || []);
         if (Array.isArray(imported) && imported.length > 0) {
+          const newOnes: StudioMovie[] = [];
           setMovies(prev => {
             const existingIds = new Set(prev.map(m => m.id));
-            const newOnes = imported.filter((m: StudioMovie) => m && m.title && !existingIds.has(m.id));
-            return [...newOnes, ...prev];
+            const filtered = imported.filter((m: StudioMovie) => m && m.title && !existingIds.has(m.id));
+            newOnes.push(...filtered);
+            return [...filtered, ...prev];
           });
+          if (isConnected && newOnes.length > 0) {
+            batchUploadMoviesToFirestore(newOnes).catch(err => {
+              console.warn('[MoviesSync] Error guardando cartelera importada en Firestore:', err);
+            });
+          }
           alert(`¡Cartelera importada con éxito! Se añadieron ${imported.length} películas.`);
         } else {
           alert('El archivo no contiene un formato de películas válido.');
@@ -885,12 +950,18 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
     };
 
     setMovies(prev => [newMovie, ...prev]);
+    if (isConnected) {
+      saveMovieToFirestore(newMovie).catch(err => {
+        console.warn('[MoviesSync] Error guardando película en Firestore:', err);
+      });
+    }
     setShowAddModal(false);
     resetForm();
   };
 
   // Toggle estado de vista/pendiente
   const handleToggleWatched = (id: string) => {
+    let updatedToSync: StudioMovie | null = null;
     setMovies(prev =>
       prev.map(movie => {
         if (movie.id !== id) return movie;
@@ -900,6 +971,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
           watched: nextWatched,
           watchedDate: nextWatched ? new Date().toISOString().slice(0, 10) : undefined,
         };
+        updatedToSync = updated;
         // Si el boleto está abierto para esta película, sincronizarlo en tiempo real
         if (ticketMovie?.id === id) {
           setTicketMovie(updated);
@@ -907,6 +979,11 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
         return updated;
       })
     );
+    if (isConnected && updatedToSync) {
+      saveMovieToFirestore(updatedToSync).catch(err => {
+        console.warn('[MoviesSync] Error actualizando película en Firestore:', err);
+      });
+    }
   };
 
   // Abrir boleto de cine VIP
@@ -944,6 +1021,11 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
       ...prev,
       [movie.id]: newReservation,
     }));
+    if (isConnected) {
+      saveReservationToFirestore(newReservation).catch(err => {
+        console.warn('[MoviesSync] Error guardando reservación en Firestore:', err);
+      });
+    }
   };
 
   const handleCancelReservation = (movieId: string) => {
@@ -952,6 +1034,11 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
       delete next[movieId];
       return next;
     });
+    if (isConnected) {
+      deleteReservationFromFirestore(movieId).catch(err => {
+        console.warn('[MoviesSync] Error cancelando reservación en Firestore:', err);
+      });
+    }
   };
 
   const [customTimeText, setCustomTimeText] = useState('');
@@ -1011,11 +1098,17 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
   // Confirmar eliminación
   const handleDeleteConfirm = () => {
     if (!movieToDelete) return;
-    setMovies(prev => prev.filter(m => m.id !== movieToDelete.id));
-    if (ticketMovie?.id === movieToDelete.id) {
+    const idToDelete = movieToDelete.id;
+    setMovies(prev => prev.filter(m => m.id !== idToDelete));
+    if (ticketMovie?.id === idToDelete) {
       setTicketMovie(null);
     }
     setMovieToDelete(null);
+    if (isConnected) {
+      deleteMovieFromFirestore(idToDelete).catch(err => {
+        console.warn('[MoviesSync] Error eliminando película de Firestore:', err);
+      });
+    }
   };
 
   // Películas filtradas
@@ -1053,6 +1146,15 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
           <div className="cinepolis-cinema-selector" title="Cine seleccionado para nuestras citas">
             <MapPin size={14} className="selector-icon" />
             <span>Complejo: <strong>Cinepelis Nuestro Rincón · Sala 1</strong></span>
+            {isConnected ? (
+              <span className={`cinepolis-cloud-pill ${cloudSyncStatus}`} title="Sincronizado en tiempo real con Firebase en la nube">
+                <Sparkles size={11} /> {cloudSyncStatus === 'syncing' ? 'Sincronizando…' : cloudSyncStatus === 'error' ? 'Error de conexión' : 'En la nube (Firebase)'}
+              </span>
+            ) : (
+              <span className="cinepolis-cloud-pill local" title="Modo local (Inicia sesión con Google para sincronizar en la nube)">
+                <Popcorn size={11} /> Cartelera local
+              </span>
+            )}
           </div>
         </div>
 

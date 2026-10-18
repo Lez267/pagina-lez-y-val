@@ -1,0 +1,266 @@
+rules_version = '2';
+// PROTOTYPE for lezz-val-universo/(default). Review and test before deployment.
+// memories/{id}: shared private memories, readable/editable only by fixed VIP identities.
+// Mutable: title<=160, description<=12000, photoDate calendar string or '',
+// location<=200, tags<=12 strings<=40, album<=100, coverMediaId<=180,
+// legacy coverMediaIndex is a bounds-checked raw-array reference, never media data.
+// reminder exact bounded map, updatedAt=request.time. Favorites: only own UID/alias.
+// Immutable on update: media, url, type, storagePath, author, createdBy, createdAt,
+// schemaVersion and EVERY unknown/original field. No field deletion is allowed.
+// New records: schemaVersion=2, media=1..20 unique canonical Cloudinary URLs.
+// Type/path are encoded in each URL; IDs are memoryId+'-media-'+ordinal.
+// Legacy media maps/URLs are immutable and remain in their existing form.
+// New records use the signed namespace, createdBy=caller,
+// createdAt=request.time, empty favorites. Every delete and all other paths denied.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isVip() {
+      return request.auth != null && database == '(default)'
+        && request.auth.uid in ["bIlEa1IXdbO73ahuiESYy8Zbfgv1","DV7KauCOERWGAmEl38C5z0iPLuJ3","ToJa2Pea8scsqUVww1HHB1HIArE2"]
+        && request.auth.token.get('email_verified', false) == true
+        && request.auth.token.get('firebase', {}).get('sign_in_provider', '') == 'google.com';
+    }
+    function legacyAlias() { return request.auth.uid in ["DV7KauCOERWGAmEl38C5z0iPLuJ3","ToJa2Pea8scsqUVww1HHB1HIArE2"] ? 'Valeria' : 'Alejandro'; }
+    function isCalendarDate(value) {
+      return value is string && value.matches('[1-9][0-9]{3}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')
+        && actualCalendarDate(value);
+    }
+    function actualCalendarDate(value) {
+      let y = int(value[0:4]); let m = int(value[5:7]); let d = int(value[8:10]);
+      let instant = timestamp.date(y, m, d);
+      return instant.year() == y && instant.month() == m && instant.day() == d;
+    }
+    function isDateOrEmpty(value) { return value is string && (value == '' || isCalendarDate(value)); }
+    function isValidTags(tags) {
+      let n = tags.size();
+      return tags is list && n <= 12 && tags.toSet().size() == n
+        && (n <= 0 || tags[0].matches('[^\\r\\n]{1,40}'))
+        && (n <= 1 || tags[1].matches('[^\\r\\n]{1,40}'))
+        && (n <= 2 || tags[2].matches('[^\\r\\n]{1,40}'))
+        && (n <= 3 || tags[3].matches('[^\\r\\n]{1,40}'))
+        && (n <= 4 || tags[4].matches('[^\\r\\n]{1,40}'))
+        && (n <= 5 || tags[5].matches('[^\\r\\n]{1,40}'))
+        && (n <= 6 || tags[6].matches('[^\\r\\n]{1,40}'))
+        && (n <= 7 || tags[7].matches('[^\\r\\n]{1,40}'))
+        && (n <= 8 || tags[8].matches('[^\\r\\n]{1,40}'))
+        && (n <= 9 || tags[9].matches('[^\\r\\n]{1,40}'))
+        && (n <= 10 || tags[10].matches('[^\\r\\n]{1,40}'))
+        && (n <= 11 || tags[11].matches('[^\\r\\n]{1,40}'));
+    }
+    function isValidReminder(value) {
+      return value is map && value.keys().hasAll(['enabled', 'date', 'label', 'repeat'])
+        && value.keys().hasOnly(['enabled', 'date', 'label', 'repeat'])
+        && value.enabled is bool && isDateOrEmpty(value.date)
+        && value.label is string && value.label.size() <= 120
+        && value.repeat in ['once', 'yearly']
+        && (!value.enabled || (value.date != '' && value.label.trim().size() > 0));
+    }
+    function isValidFavorites(value) {
+      return value is list && value.size() <= 5
+        && value.toSet().size() == value.size()
+        && value.hasOnly(["bIlEa1IXdbO73ahuiESYy8Zbfgv1","DV7KauCOERWGAmEl38C5z0iPLuJ3","ToJa2Pea8scsqUVww1HHB1HIArE2","Alejandro","Valeria"]);
+    }
+    function isValidMemory(data) {
+      return (!('title' in data) || (data.title.matches('(?s).{1,160}') && data.title.trim().size() > 0))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 12000))
+        && (!('photoDate' in data) || isDateOrEmpty(data.photoDate))
+        && (!('location' in data) || data.location.matches('(?s).{0,200}'))
+        && (!('album' in data) || data.album.matches('(?s).{0,100}'))
+        && (!('author' in data) || data.author.matches('(?s).{0,100}'))
+        && (!('tags' in data) || isValidTags(data.tags))
+        && (!('favorites' in data) || isValidFavorites(data.favorites))
+        && (!('reminder' in data) || isValidReminder(data.reminder))
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+    function isValidNewMedia(items, cover, memoryId) {
+      let n = items.size();
+      return items is list && n >= 1 && n <= 20
+        && items.toSet().size() == n
+        && (n <= 0 || items[0].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 1 || items[1].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 2 || items[2].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 3 || items[3].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 4 || items[4].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 5 || items[5].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 6 || items[6].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 7 || items[7].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 8 || items[8].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 9 || items[9].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 10 || items[10].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 11 || items[11].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 12 || items[12].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 13 || items[13].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 14 || items[14].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 15 || items[15].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 16 || items[16].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 17 || items[17].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 18 || items[18].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && (n <= 19 || items[19].matches('https://res[.]cloudinary[.]com/dc7x4qjzu/(image|video)/upload/v[0-9]{1,20}/nuestro-universo/[0-9a-f]{24}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}([.][A-Za-z0-9]{1,8})?'))
+        && isConstructedCover(cover, memoryId, n);
+    }
+    function isConstructedCover(cover, memoryId, count) {
+      let prefix = memoryId + '-media-';
+      return cover is string && cover.size() > prefix.size() && cover[0:prefix.size()] == prefix
+        && cover[prefix.size():].matches('[1-9][0-9]?') && int(cover[prefix.size():]) <= count;
+    }
+    function explicitCover(items, cover) {
+      let n = items.size();
+      return cover != '' && ((n > 7 ? (items[0].get('id', '') == cover || items[1].get('id', '') == cover || items[2].get('id', '') == cover || items[3].get('id', '') == cover || items[4].get('id', '') == cover || items[5].get('id', '') == cover || items[6].get('id', '') == cover || items[7].get('id', '') == cover) : ((n > 0 && items[0].get('id', '') == cover) || (n > 1 && items[1].get('id', '') == cover) || (n > 2 && items[2].get('id', '') == cover) || (n > 3 && items[3].get('id', '') == cover) || (n > 4 && items[4].get('id', '') == cover) || (n > 5 && items[5].get('id', '') == cover) || (n > 6 && items[6].get('id', '') == cover) || (n > 7 && items[7].get('id', '') == cover)))
+        || (n > 15 ? (items[8].get('id', '') == cover || items[9].get('id', '') == cover || items[10].get('id', '') == cover || items[11].get('id', '') == cover || items[12].get('id', '') == cover || items[13].get('id', '') == cover || items[14].get('id', '') == cover || items[15].get('id', '') == cover) : ((n > 8 && items[8].get('id', '') == cover) || (n > 9 && items[9].get('id', '') == cover) || (n > 10 && items[10].get('id', '') == cover) || (n > 11 && items[11].get('id', '') == cover) || (n > 12 && items[12].get('id', '') == cover) || (n > 13 && items[13].get('id', '') == cover) || (n > 14 && items[14].get('id', '') == cover) || (n > 15 && items[15].get('id', '') == cover)))
+        || (n > 23 ? (items[16].get('id', '') == cover || items[17].get('id', '') == cover || items[18].get('id', '') == cover || items[19].get('id', '') == cover || items[20].get('id', '') == cover || items[21].get('id', '') == cover || items[22].get('id', '') == cover || items[23].get('id', '') == cover) : ((n > 16 && items[16].get('id', '') == cover) || (n > 17 && items[17].get('id', '') == cover) || (n > 18 && items[18].get('id', '') == cover) || (n > 19 && items[19].get('id', '') == cover) || (n > 20 && items[20].get('id', '') == cover) || (n > 21 && items[21].get('id', '') == cover) || (n > 22 && items[22].get('id', '') == cover) || (n > 23 && items[23].get('id', '') == cover)))
+        || (n > 31 ? (items[24].get('id', '') == cover || items[25].get('id', '') == cover || items[26].get('id', '') == cover || items[27].get('id', '') == cover || items[28].get('id', '') == cover || items[29].get('id', '') == cover || items[30].get('id', '') == cover || items[31].get('id', '') == cover) : ((n > 24 && items[24].get('id', '') == cover) || (n > 25 && items[25].get('id', '') == cover) || (n > 26 && items[26].get('id', '') == cover) || (n > 27 && items[27].get('id', '') == cover) || (n > 28 && items[28].get('id', '') == cover) || (n > 29 && items[29].get('id', '') == cover) || (n > 30 && items[30].get('id', '') == cover) || (n > 31 && items[31].get('id', '') == cover)))
+        || (n > 39 ? (items[32].get('id', '') == cover || items[33].get('id', '') == cover || items[34].get('id', '') == cover || items[35].get('id', '') == cover || items[36].get('id', '') == cover || items[37].get('id', '') == cover || items[38].get('id', '') == cover || items[39].get('id', '') == cover) : ((n > 32 && items[32].get('id', '') == cover) || (n > 33 && items[33].get('id', '') == cover) || (n > 34 && items[34].get('id', '') == cover) || (n > 35 && items[35].get('id', '') == cover) || (n > 36 && items[36].get('id', '') == cover) || (n > 37 && items[37].get('id', '') == cover) || (n > 38 && items[38].get('id', '') == cover) || (n > 39 && items[39].get('id', '') == cover)))
+        || (n > 47 ? (items[40].get('id', '') == cover || items[41].get('id', '') == cover || items[42].get('id', '') == cover || items[43].get('id', '') == cover || items[44].get('id', '') == cover || items[45].get('id', '') == cover || items[46].get('id', '') == cover || items[47].get('id', '') == cover) : ((n > 40 && items[40].get('id', '') == cover) || (n > 41 && items[41].get('id', '') == cover) || (n > 42 && items[42].get('id', '') == cover) || (n > 43 && items[43].get('id', '') == cover) || (n > 44 && items[44].get('id', '') == cover) || (n > 45 && items[45].get('id', '') == cover) || (n > 46 && items[46].get('id', '') == cover) || (n > 47 && items[47].get('id', '') == cover)))
+        || (n > 55 ? (items[48].get('id', '') == cover || items[49].get('id', '') == cover || items[50].get('id', '') == cover || items[51].get('id', '') == cover || items[52].get('id', '') == cover || items[53].get('id', '') == cover || items[54].get('id', '') == cover || items[55].get('id', '') == cover) : ((n > 48 && items[48].get('id', '') == cover) || (n > 49 && items[49].get('id', '') == cover) || (n > 50 && items[50].get('id', '') == cover) || (n > 51 && items[51].get('id', '') == cover) || (n > 52 && items[52].get('id', '') == cover) || (n > 53 && items[53].get('id', '') == cover) || (n > 54 && items[54].get('id', '') == cover) || (n > 55 && items[55].get('id', '') == cover)))
+        || (n > 63 ? (items[56].get('id', '') == cover || items[57].get('id', '') == cover || items[58].get('id', '') == cover || items[59].get('id', '') == cover || items[60].get('id', '') == cover || items[61].get('id', '') == cover || items[62].get('id', '') == cover || items[63].get('id', '') == cover) : ((n > 56 && items[56].get('id', '') == cover) || (n > 57 && items[57].get('id', '') == cover) || (n > 58 && items[58].get('id', '') == cover) || (n > 59 && items[59].get('id', '') == cover) || (n > 60 && items[60].get('id', '') == cover) || (n > 61 && items[61].get('id', '') == cover) || (n > 62 && items[62].get('id', '') == cover) || (n > 63 && items[63].get('id', '') == cover)))
+        || (n > 71 ? (items[64].get('id', '') == cover || items[65].get('id', '') == cover || items[66].get('id', '') == cover || items[67].get('id', '') == cover || items[68].get('id', '') == cover || items[69].get('id', '') == cover || items[70].get('id', '') == cover || items[71].get('id', '') == cover) : ((n > 64 && items[64].get('id', '') == cover) || (n > 65 && items[65].get('id', '') == cover) || (n > 66 && items[66].get('id', '') == cover) || (n > 67 && items[67].get('id', '') == cover) || (n > 68 && items[68].get('id', '') == cover) || (n > 69 && items[69].get('id', '') == cover) || (n > 70 && items[70].get('id', '') == cover) || (n > 71 && items[71].get('id', '') == cover)))
+        || (n > 79 ? (items[72].get('id', '') == cover || items[73].get('id', '') == cover || items[74].get('id', '') == cover || items[75].get('id', '') == cover || items[76].get('id', '') == cover || items[77].get('id', '') == cover || items[78].get('id', '') == cover || items[79].get('id', '') == cover) : ((n > 72 && items[72].get('id', '') == cover) || (n > 73 && items[73].get('id', '') == cover) || (n > 74 && items[74].get('id', '') == cover) || (n > 75 && items[75].get('id', '') == cover) || (n > 76 && items[76].get('id', '') == cover) || (n > 77 && items[77].get('id', '') == cover) || (n > 78 && items[78].get('id', '') == cover) || (n > 79 && items[79].get('id', '') == cover)))
+        || (n > 87 ? (items[80].get('id', '') == cover || items[81].get('id', '') == cover || items[82].get('id', '') == cover || items[83].get('id', '') == cover || items[84].get('id', '') == cover || items[85].get('id', '') == cover || items[86].get('id', '') == cover || items[87].get('id', '') == cover) : ((n > 80 && items[80].get('id', '') == cover) || (n > 81 && items[81].get('id', '') == cover) || (n > 82 && items[82].get('id', '') == cover) || (n > 83 && items[83].get('id', '') == cover) || (n > 84 && items[84].get('id', '') == cover) || (n > 85 && items[85].get('id', '') == cover) || (n > 86 && items[86].get('id', '') == cover) || (n > 87 && items[87].get('id', '') == cover)))
+        || (n > 95 ? (items[88].get('id', '') == cover || items[89].get('id', '') == cover || items[90].get('id', '') == cover || items[91].get('id', '') == cover || items[92].get('id', '') == cover || items[93].get('id', '') == cover || items[94].get('id', '') == cover || items[95].get('id', '') == cover) : ((n > 88 && items[88].get('id', '') == cover) || (n > 89 && items[89].get('id', '') == cover) || (n > 90 && items[90].get('id', '') == cover) || (n > 91 && items[91].get('id', '') == cover) || (n > 92 && items[92].get('id', '') == cover) || (n > 93 && items[93].get('id', '') == cover) || (n > 94 && items[94].get('id', '') == cover) || (n > 95 && items[95].get('id', '') == cover)))
+        || (n > 103 ? (items[96].get('id', '') == cover || items[97].get('id', '') == cover || items[98].get('id', '') == cover || items[99].get('id', '') == cover || items[100].get('id', '') == cover || items[101].get('id', '') == cover || items[102].get('id', '') == cover || items[103].get('id', '') == cover) : ((n > 96 && items[96].get('id', '') == cover) || (n > 97 && items[97].get('id', '') == cover) || (n > 98 && items[98].get('id', '') == cover) || (n > 99 && items[99].get('id', '') == cover) || (n > 100 && items[100].get('id', '') == cover) || (n > 101 && items[101].get('id', '') == cover) || (n > 102 && items[102].get('id', '') == cover) || (n > 103 && items[103].get('id', '') == cover)))
+        || (n > 111 ? (items[104].get('id', '') == cover || items[105].get('id', '') == cover || items[106].get('id', '') == cover || items[107].get('id', '') == cover || items[108].get('id', '') == cover || items[109].get('id', '') == cover || items[110].get('id', '') == cover || items[111].get('id', '') == cover) : ((n > 104 && items[104].get('id', '') == cover) || (n > 105 && items[105].get('id', '') == cover) || (n > 106 && items[106].get('id', '') == cover) || (n > 107 && items[107].get('id', '') == cover) || (n > 108 && items[108].get('id', '') == cover) || (n > 109 && items[109].get('id', '') == cover) || (n > 110 && items[110].get('id', '') == cover) || (n > 111 && items[111].get('id', '') == cover)))
+        || (n > 119 ? (items[112].get('id', '') == cover || items[113].get('id', '') == cover || items[114].get('id', '') == cover || items[115].get('id', '') == cover || items[116].get('id', '') == cover || items[117].get('id', '') == cover || items[118].get('id', '') == cover || items[119].get('id', '') == cover) : ((n > 112 && items[112].get('id', '') == cover) || (n > 113 && items[113].get('id', '') == cover) || (n > 114 && items[114].get('id', '') == cover) || (n > 115 && items[115].get('id', '') == cover) || (n > 116 && items[116].get('id', '') == cover) || (n > 117 && items[117].get('id', '') == cover) || (n > 118 && items[118].get('id', '') == cover) || (n > 119 && items[119].get('id', '') == cover)))
+        || (n > 127 ? (items[120].get('id', '') == cover || items[121].get('id', '') == cover || items[122].get('id', '') == cover || items[123].get('id', '') == cover || items[124].get('id', '') == cover || items[125].get('id', '') == cover || items[126].get('id', '') == cover || items[127].get('id', '') == cover) : ((n > 120 && items[120].get('id', '') == cover) || (n > 121 && items[121].get('id', '') == cover) || (n > 122 && items[122].get('id', '') == cover) || (n > 123 && items[123].get('id', '') == cover) || (n > 124 && items[124].get('id', '') == cover) || (n > 125 && items[125].get('id', '') == cover) || (n > 126 && items[126].get('id', '') == cover) || (n > 127 && items[127].get('id', '') == cover))));
+    }
+    function legacyOrdinalCover(items, suffix) {
+      let ordinal = int(suffix);
+      return ordinal >= 1 && ordinal <= items.size() && !('id' in items[ordinal - 1]);
+    }
+    function legacyCover(items, cover, memoryId) {
+      let prefix = memoryId + '-media-';
+      return cover.size() > prefix.size() && cover[0:prefix.size()] == prefix
+        && cover[prefix.size():].matches('[1-9][0-9]{0,2}')
+        && legacyOrdinalCover(items, cover[prefix.size():]);
+    }
+    function indexedLegacyCover(items, cover, memoryId, index) {
+      return index is int && index >= 0 && index < items.size()
+        && items[index] is map
+        && items[index].get('id', memoryId + '-media-' + string(index + 1)) == cover;
+    }
+    function isValidCover(data, memoryId) {
+      let items = data.get('media', []); let cover = data.get('coverMediaId', '');
+      return !('coverMediaId' in data) ? !('coverMediaIndex' in data) : (cover is string && cover.size() <= 180
+        && items is list
+        && (data.get('schemaVersion', 0) == 2
+          ? (!('coverMediaIndex' in data) && isConstructedCover(cover, memoryId, items.size()))
+          : ((items.size() == 0 && cover == '' && !('coverMediaIndex' in data))
+            || (cover != '' && ('coverMediaIndex' in data
+              ? indexedLegacyCover(items, cover, memoryId, data.coverMediaIndex)
+              : (legacyCover(items, cover, memoryId) || explicitCover(items, cover)))))));
+    }
+    function isValidCreate(data, memoryId) {
+      return memoryId.matches('[A-Za-z0-9]{20}')
+        && data.keys().hasAll(['title','description','photoDate','location','tags','album','author','createdBy','createdAt','media','favorites','coverMediaId','schemaVersion'])
+        && data.keys().hasOnly(['title','description','photoDate','location','tags','album','author','createdBy','createdAt','media','favorites','coverMediaId','reminder','schemaVersion'])
+        && data.createdBy == request.auth.uid && data.createdAt == request.time
+        && data.favorites is list && data.favorites.size() == 0
+        && data.schemaVersion == 2
+        && isValidNewMedia(data.media, data.coverMediaId, memoryId);
+    }
+    // Create requires every metadata field. Direct checks preserve the generic
+    // validator's constraints without repeating optional-field or timestamp work.
+    function isValidNewMetadata(data) {
+      return data.title.matches('(?s).{1,160}') && data.title.trim().size() > 0
+        && data.description is string && data.description.size() <= 12000
+        && isDateOrEmpty(data.photoDate)
+        && data.location.matches('(?s).{0,200}')
+        && data.album.matches('(?s).{0,100}')
+        && data.author.matches('(?s).{0,100}')
+        && isValidTags(data.tags)
+        && (!('reminder' in data) || isValidReminder(data.reminder));
+    }
+    function ownFavoriteChanges(before, after) {
+      let own = [request.auth.uid, legacyAlias()];
+      return after.toSet().difference(before.toSet()).hasOnly(own)
+        && before.toSet().difference(after.toSet()).hasOnly(own);
+    }
+    function isValidUpdate(before, after, memoryId) {
+      let difference = after.diff(before); let changed = difference.affectedKeys();
+      return difference.removedKeys().size() == 0
+        && after.get('updatedAt', null) == request.time
+        && (changed.hasOnly(['title','description','photoDate','location','tags','album','coverMediaId','coverMediaIndex','reminder','updatedAt'])
+          || (changed.hasOnly(['favorites','updatedAt'])
+            && isValidFavorites(after.get('favorites', []))
+            && ownFavoriteChanges(before.get('favorites', []), after.get('favorites', []))))
+        && (!changed.hasAny(['coverMediaId','coverMediaIndex']) || isValidCover(after, memoryId));
+    }
+    // Shared studio records: history date is presentation; savedAt is authority.
+    function isValidStudioBase(data, recordId) {
+      return recordId.matches('[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}')
+        && data.keys().hasAll(['id','createdAt','createdBy','schemaVersion','savedAt'])
+        && data.id == recordId && data.schemaVersion == 1
+        && data.createdBy in ["bIlEa1IXdbO73ahuiESYy8Zbfgv1","DV7KauCOERWGAmEl38C5z0iPLuJ3","ToJa2Pea8scsqUVww1HHB1HIArE2"] && data.savedAt is timestamp
+        && data.createdAt is string && data.createdAt.size() <= 32
+        && data.createdAt.matches('[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9][.][0-9]{3}Z')
+        && isCalendarDate(data.createdAt[0:10]);
+    }
+    function isValidLetter(data, recordId) {
+      return isValidStudioBase(data, recordId)
+        && data.keys().hasAll(['title','body','author','tag','occasion'])
+        && data.keys().hasOnly(['id','createdAt','createdBy','schemaVersion','savedAt','title','body','author','tag','occasion'])
+        && data.title is string && data.title.trim().size() > 0 && data.title.size() <= 100
+        && data.body is string && data.body.trim().size() > 0 && data.body.size() <= 12000
+        && data.author in ['Ale','Val'] && data.tag in ['Para hoy','Abre cuando']
+        && data.occasion is string && data.occasion.size() <= 120
+        && ((data.tag == 'Para hoy' && data.occasion == '') || (data.tag == 'Abre cuando' && data.occasion.trim().size() > 0));
+    }
+    function isValidSong(data, recordId) {
+      return isValidStudioBase(data, recordId)
+        && data.keys().hasAll(['title','artist','note','author','url','kind'])
+        && data.keys().hasOnly(['id','createdAt','createdBy','schemaVersion','savedAt','title','artist','note','author','url','kind'])
+        && data.title is string && data.title.trim().size() > 0 && data.title.size() <= 140
+        && data.artist is string && data.artist.trim().size() > 0 && data.artist.size() <= 120
+        && data.note is string && data.note.trim().size() > 0 && data.note.size() <= 2000
+        && data.author in ['Ale','Val'] && data.kind in ['track','playlist','album']
+        && data.url is string && data.url.size() <= 250
+        && data.url.matches('https://open[.]spotify[.]com/' + data.kind + '/[A-Za-z0-9]{1,100}');
+    }
+    function isValidPlan(data, recordId) {
+      return isValidStudioBase(data, recordId)
+        && data.keys().hasAll(['title','note','category','date','done','author'])
+        && data.keys().hasOnly(['id','createdAt','createdBy','schemaVersion','savedAt','title','note','category','date','done','author','updatedAt'])
+        && data.title is string && data.title.trim().size() > 0 && data.title.size() <= 140
+        && data.note is string && data.note.size() <= 2000
+        && data.category in ['Una cita','Una aventura','En casita','Por descubrir']
+        && isDateOrEmpty(data.date) && (data.date == '' || (data.date >= '1900-01-01' && data.date <= '2200-12-31'))
+        && data.author in ['Ale','Val'] && data.done is bool && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+    match /memories/{memoryId} {
+      allow read: if isVip();
+      allow create: if resource == null && isVip() && isValidNewMetadata(request.resource.data) && isValidCreate(request.resource.data, memoryId);
+      allow update: if resource != null && isVip() && isValidMemory(request.resource.data) && isValidUpdate(resource.data, request.resource.data, memoryId);
+      allow delete: if false;
+    }
+    match /letters/{recordId} {
+      allow read: if isVip();
+      allow create: if resource == null && isVip() && isValidLetter(request.resource.data, recordId)
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.savedAt == request.time;
+      allow update, delete: if false;
+    }
+    match /songs/{recordId} {
+      allow read: if isVip();
+      allow create: if resource == null && isVip() && isValidSong(request.resource.data, recordId)
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.savedAt == request.time;
+      allow update, delete: if false;
+    }
+    match /plans/{recordId} {
+      allow read: if isVip();
+      allow create: if resource == null && isVip() && isValidPlan(request.resource.data, recordId)
+        && !('updatedAt' in request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.savedAt == request.time;
+      allow update: if resource != null && isVip() && isValidPlan(request.resource.data, recordId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['done','updatedAt'])
+        && request.resource.data.diff(resource.data).removedKeys().size() == 0
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+    match /movies/{recordId} {
+      allow read, write: if isVip();
+    }
+    match /reservations/{recordId} {
+      allow read, write: if isVip();
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}
