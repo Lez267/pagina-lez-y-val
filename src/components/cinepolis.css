@@ -116,39 +116,6 @@
   font-weight: 600;
 }
 
-.cinepolis-cloud-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.35);
-  color: #4ade80;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 9px;
-  border-radius: 999px;
-  letter-spacing: 0.2px;
-  margin-left: 6px;
-}
-
-.cinepolis-cloud-pill.syncing {
-  background: rgba(234, 179, 8, 0.15);
-  border-color: rgba(234, 179, 8, 0.4);
-  color: #facc15;
-}
-
-.cinepolis-cloud-pill.error {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #f87171;
-}
-
-.cinepolis-cloud-pill.local {
-  background: rgba(148, 163, 184, 0.12);
-  border-color: rgba(148, 163, 184, 0.25);
-  color: #94a3b8;
-}
-
 .cinepolis-hero-titles {
   margin: 10px 0 20px;
 }

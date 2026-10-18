@@ -591,7 +591,6 @@ const DATE_OPTIONS = [
 export default function MoviesPage({ namespace, session }: { namespace: string; session?: GallerySession | null }) {
   const demo = studioIsDemo(namespace);
   const isConnected = !!session;
-  const [cloudSyncStatus, setCloudSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   // Inicialización: mantiene las películas que el usuario ha guardado.
   // Si no hay ninguna, empieza limpia ([]) para no imponer películas que el usuario no agregó.
@@ -643,14 +642,12 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
   // Sincronización en tiempo real con Cloud Firestore (Firebase)
   useEffect(() => {
     if (!isConnected) return;
-    setCloudSyncStatus('syncing');
 
     const migratedMoviesKey = `${namespace}:cinepelis-migrated-to-firestore:v1`;
     const migratedReservationsKey = `${namespace}:cinepelis-reservations-migrated-to-firestore:v1`;
 
     const unsubMovies = watchFirestoreMovies(
       (firestoreMovies) => {
-        setCloudSyncStatus('synced');
         if (firestoreMovies.length > 0) {
           setMovies(firestoreMovies);
           writeLocal(migratedMoviesKey, true);
@@ -673,7 +670,6 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
       },
       (err) => {
         console.warn('[MoviesSync] Error cargando películas de Firestore:', err);
-        setCloudSyncStatus('error');
       }
     );
 
@@ -1146,15 +1142,6 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
           <div className="cinepolis-cinema-selector" title="Cine seleccionado para nuestras citas">
             <MapPin size={14} className="selector-icon" />
             <span>Complejo: <strong>Cinepelis Nuestro Rincón · Sala 1</strong></span>
-            {isConnected ? (
-              <span className={`cinepolis-cloud-pill ${cloudSyncStatus}`} title="Sincronizado en tiempo real con Firebase en la nube">
-                <Sparkles size={11} /> {cloudSyncStatus === 'syncing' ? 'Sincronizando…' : cloudSyncStatus === 'error' ? 'Error de conexión' : 'En la nube (Firebase)'}
-              </span>
-            ) : (
-              <span className="cinepolis-cloud-pill local" title="Modo local (Inicia sesión con Google para sincronizar en la nube)">
-                <Popcorn size={11} /> Cartelera local
-              </span>
-            )}
           </div>
         </div>
 
