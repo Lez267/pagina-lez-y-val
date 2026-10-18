@@ -603,14 +603,14 @@ const DATE_OPTIONS = [
 export default function MoviesPage({ namespace, session }: { namespace: string; session?: GallerySession | null }) {
   const demo = studioIsDemo(namespace);
 
-  // Inicialización defensiva: si el namespace conectado no tiene películas,
-  // hereda las que haya guardado en modo demo o los DEFAULT_MOVIES para no quedar en blanco.
+  // Inicialización: mantiene las películas que el usuario ha guardado.
+  // Si no hay ninguna, empieza limpia ([]) para no imponer películas que el usuario no agregó.
   const getInitialMovies = (): StudioMovie[] => {
     const existing = readLocal<StudioMovie[] | null>(`${namespace}:movies:v1`, null);
-    if (existing && Array.isArray(existing) && existing.length > 0) return existing;
+    if (existing && Array.isArray(existing)) return existing;
     const demoExisting = readLocal<StudioMovie[] | null>('nh:demo:movies:v1', null);
-    if (demoExisting && Array.isArray(demoExisting) && demoExisting.length > 0) return demoExisting;
-    return DEFAULT_MOVIES;
+    if (demoExisting && Array.isArray(demoExisting)) return demoExisting;
+    return [];
   };
 
   const [movies, setMovies] = useLocalState<StudioMovie[]>(`${namespace}:movies:v1`, getInitialMovies());
@@ -1303,26 +1303,15 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
               <span>Agregar película a cartelera</span>
             </button>
             {movies.length === 0 && (
-              <>
-                <button
-                  type="button"
-                  className="cinepolis-cta-export"
-                  onClick={() => setMovies(DEFAULT_MOVIES)}
-                  title="Cargar las películas iniciales recomendadas"
-                >
-                  <Sparkles size={16} />
-                  <span>Cargar películas recomendadas</span>
-                </button>
-                <button
-                  type="button"
-                  className="cinepolis-cta-export"
-                  onClick={() => importFileRef.current?.click()}
-                  title="Importar lista de películas desde archivo JSON"
-                >
-                  <Upload size={16} />
-                  <span>Importar respaldo JSON</span>
-                </button>
-              </>
+              <button
+                type="button"
+                className="cinepolis-cta-export"
+                onClick={() => importFileRef.current?.click()}
+                title="Importar lista de películas desde tu archivo descargado"
+              >
+                <Upload size={16} />
+                <span>Importar mi cartelera</span>
+              </button>
             )}
           </div>
         </div>
