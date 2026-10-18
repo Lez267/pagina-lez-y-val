@@ -21,9 +21,10 @@ import {
   Star,
   Ticket,
   Trash2,
+  Upload,
   X,
 } from 'lucide-react';
-import { downloadJson, useLocalState } from '../lib/storage';
+import { downloadJson, readLocal, useLocalState } from '../lib/storage';
 import { StudioDialog, studioIsDemo } from './LettersPage';
 import { identifyGooglePlayer } from '../lib/game-progression';
 import type { GallerySession } from '../data/types';
@@ -601,7 +602,18 @@ const DATE_OPTIONS = [
 
 export default function MoviesPage({ namespace, session }: { namespace: string; session?: GallerySession | null }) {
   const demo = studioIsDemo(namespace);
-  const [movies, setMovies] = useLocalState<StudioMovie[]>(`${namespace}:movies:v1`, demo ? DEFAULT_MOVIES : []);
+
+  // Inicialización defensiva: si el namespace conectado no tiene películas,
+  // hereda las que haya guardado en modo demo o los DEFAULT_MOVIES para no quedar en blanco.
+  const getInitialMovies = (): StudioMovie[] => {
+    const existing = readLocal<StudioMovie[] | null>(`${namespace}:movies:v1`, null);
+    if (existing && Array.isArray(existing) && existing.length > 0) return existing;
+    const demoExisting = readLocal<StudioMovie[] | null>('nh:demo:movies:v1', null);
+    if (demoExisting && Array.isArray(demoExisting) && demoExisting.length > 0) return demoExisting;
+    return DEFAULT_MOVIES;
+  };
+
+  const [movies, setMovies] = useLocalState<StudioMovie[]>(`${namespace}:movies:v1`, getInitialMovies());
 
   // Identificar el usuario conectado con Google (Ale vs Val)
   const currentUserAuthor: StudioAuthor | null = session
@@ -625,10 +637,45 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
   const [ticketShowtime, setTicketShowtime] = useState<string>('8:30 PM');
 
   // Reservaciones de funciones de cine para ver juntos
+  const getInitialReservations = (): Record<string, MovieReservation> => {
+    const existing = readLocal<Record<string, MovieReservation> | null>(`${namespace}:cinepelis-reservations:v1`, null);
+    if (existing && Object.keys(existing).length > 0) return existing;
+    const demoExisting = readLocal<Record<string, MovieReservation> | null>('nh:demo:cinepelis-reservations:v1', null);
+    if (demoExisting && Object.keys(demoExisting).length > 0) return demoExisting;
+    return {};
+  };
+
   const [reservations, setReservations] = useLocalState<Record<string, MovieReservation>>(
     `${namespace}:cinepelis-reservations:v1`,
-    {}
+    getInitialReservations()
   );
+
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const handleImportCartelera = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target?.result as string);
+        const imported = Array.isArray(parsed) ? parsed : (parsed.movies || parsed.cartelera || []);
+        if (Array.isArray(imported) && imported.length > 0) {
+          setMovies(prev => {
+            const existingIds = new Set(prev.map(m => m.id));
+            const newOnes = imported.filter((m: StudioMovie) => m && m.title && !existingIds.has(m.id));
+            return [...newOnes, ...prev];
+          });
+          alert(`¡Cartelera importada con éxito! Se añadieron ${imported.length} películas.`);
+        } else {
+          alert('El archivo no contiene un formato de películas válido.');
+        }
+      } catch {
+        alert('No se pudo leer el archivo de cartelera.');
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   // Película seleccionada al azar (para no estar de indecisos)
   const [randomPickedMovie, setRandomPickedMovie] = useState<StudioMovie | null>(null);
@@ -1043,6 +1090,23 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
             <Download size={15} />
             <span>Descargar cartelera</span>
           </button>
+
+          <input
+            type="file"
+            ref={importFileRef}
+            accept="application/json"
+            onChange={handleImportCartelera}
+            style={{ display: 'none' }}
+          />
+          <button
+            type="button"
+            className="cinepolis-cta-export"
+            onClick={() => importFileRef.current?.click()}
+            title="Importar lista de películas en JSON"
+          >
+            <Upload size={15} />
+            <span>Importar cartelera</span>
+          </button>
         </div>
       </header>
 
@@ -1233,11 +1297,34 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
             {filterTab === 'pending'
               ? 'Pueden programar una nueva película para su próxima cita de mantita y palomitas.'
               : 'Agrega una película a la cartelera para disfrutar de su siguiente función privada.'}
-          </p>
-          <button className="cinepolis-cta-add" onClick={handleOpenAdd}>
-            <Plus size={16} />
-            <span>Agregar película a cartelera</span>
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', marginTop: '12px' }}>
+            <button className="cinepolis-cta-add" onClick={handleOpenAdd}>
+              <Plus size={16} />
+              <span>Agregar película a cartelera</span>
+            </button>
+            {movies.length === 0 && (
+              <>
+                <button
+                  type="button"
+                  className="cinepolis-cta-export"
+                  onClick={() => setMovies(DEFAULT_MOVIES)}
+                  title="Cargar las películas iniciales recomendadas"
+                >
+                  <Sparkles size={16} />
+                  <span>Cargar películas recomendadas</span>
+                </button>
+                <button
+                  type="button"
+                  className="cinepolis-cta-export"
+                  onClick={() => importFileRef.current?.click()}
+                  title="Importar lista de películas desde archivo JSON"
+                >
+                  <Upload size={16} />
+                  <span>Importar respaldo JSON</span>
+                </button>
+              </>
+            )}
+          </div>
         </div>
       ) : (
         <div className="cartelera-grid cinepolis-grid">
