@@ -16,9 +16,10 @@ test('legacy email hashing matches Node SHA-256 for trimmed lowercase UTF-8 inpu
 test('metadata patch is strictly partial and does not change source media, identity or unknown fields', () => {
   const before = structuredClone(raw);
   const patch = buildGalleryMetadataPatch('test-memory', raw, edit({ media: [...edit().media].reverse(), author: 'Attempted replacement' }));
-  assert.deepEqual(Object.keys(patch).sort(), ['album','coverMediaId','description','location','photoDate','tags','title']);
+  assert.deepEqual(Object.keys(patch).sort(), ['album','coverMediaId','coverMediaIndex','description','location','photoDate','tags','title']);
   for (const field of ['media','url','author','createdBy','createdAt','favorites','unknown']) assert.equal(field in patch, false);
   assert.equal(patch.coverMediaId, 'test-memory-media-2');
+  assert.equal(patch.coverMediaIndex, 1);
   assert.deepEqual(raw, before);
 });
 test('metadata edits reject altered, missing, duplicate and foreign media references', () => {
@@ -34,6 +35,7 @@ test('explicit media IDs survive metadata patch validation without reordering ra
   const current = normalizeMemory('new-memory', document);
   const patch = buildGalleryMetadataPatch('new-memory', document, { ...current, coverMediaId: 'stable-file-1' });
   assert.equal(patch.coverMediaId, 'stable-file-1'); assert.equal('media' in patch, false);
+  assert.equal(patch.coverMediaIndex, 1);
   assert.equal(document.media[0].id, 'stable-file-0');
 });
 test('dates, tags, text limits and reminders are validated before any write', () => {

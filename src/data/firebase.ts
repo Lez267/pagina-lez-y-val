@@ -1,6 +1,6 @@
 import { getApps, initializeApp } from 'firebase/app';
-import { browserLocalPersistence, getAuth, GoogleAuthProvider, onAuthStateChanged, setPersistence, signInWithPopup, signOut, type Auth } from 'firebase/auth';
-import { collection, getDocs, getFirestore, onSnapshot } from 'firebase/firestore';
+import { browserLocalPersistence, getAuth, getIdTokenResult, GoogleAuthProvider, onAuthStateChanged, setPersistence, signInWithPopup, signOut, type Auth, type User } from 'firebase/auth';
+import { collection, getDocsFromServer, getFirestore, onSnapshot } from 'firebase/firestore';
 import { firebaseConfig } from './firebase-config';
 import { normalizeMemory } from './normalizer';
 import type { GallerySession } from './types';
@@ -10,6 +10,17 @@ let pendingConnection: Promise<GallerySession> | undefined;
 let connectionEpoch = 0;
 let latestAttemptEpoch = 0;
 let authCleanup: Promise<void> = Promise.resolve();
+const allowedUids = new Set(['bIlEa1IXdbO73ahuiESYy8Zbfgv1', 'DV7KauCOERWGAmEl38C5z0iPLuJ3', 'ToJa2Pea8scsqUVww1HHB1HIArE2']);
+const authorized = (user: User | null): user is User => !!user && allowedUids.has(user.uid) && user.emailVerified && user.providerData.some(provider => provider.providerId === 'google.com');
+
+async function verifiedSession(auth: Auth, user: User, epoch: number): Promise<GallerySession> {
+  if (!authorized(user)) throw new Error('Esta cuenta no está autorizada.');
+  const token = await getIdTokenResult(user, true);
+  if ((token.claims.firebase as { sign_in_provider?: string } | undefined)?.sign_in_provider !== 'google.com') throw new Error('La sesión requiere Google.');
+  const snapshot = await getDocsFromServer(collection(getFirestore(auth.app), 'memories'));
+  if (epoch !== connectionEpoch || auth.currentUser !== user) throw new Error('La conexión fue cancelada.');
+  return { memories: snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase')).sort((a, b) => b.date.localeCompare(a.date)), uid: user.uid, displayName: user.displayName || 'Nuestra galería', email: user.email || '', photoURL: user.photoURL || '' };
+}
 
 function queueSignOut(auth: Auth, stillRelevant: () => boolean = () => true): Promise<void> {
   // Finish earlier cleanup before a new popup can establish another session.
@@ -33,19 +44,19 @@ function getGalleryAuth(): Auth {
 export function requireConnectedGallery() {
   const auth = getGalleryAuth();
   const user = auth.currentUser;
-  if (!user || auth.app.options.projectId !== 'lezz-val-universo') throw new Error('Primero abre la galería con Google.');
+  if (!authorized(user) || auth.app.options.projectId !== 'lezz-val-universo') throw new Error('Primero abre la galería con tu cuenta Google autorizada.');
   return { auth, db: getFirestore(auth.app), user };
 }
 
 export async function readCurrentMemories() {
   const { auth, db, user } = requireConnectedGallery();
-  const snapshot = await getDocs(collection(db, 'memories'));
+  const snapshot = await getDocsFromServer(collection(db, 'memories'));
   if (auth.currentUser?.uid !== user.uid) throw new Error('La sesión cambió mientras se leían los recuerdos.');
   return snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase'))
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
-export function watchCurrentMemories(onMemories: (memories: GallerySession['memories']) => void, onError?: () => void) {
+export function watchCurrentMemories(onMemories: (memories: GallerySession['memories']) => void, onError?: () => void, expectedUid?: string) {
   try {
     const auth = getGalleryAuth();
     let unsubsSnapshot: (() => void) | undefined;
@@ -53,15 +64,16 @@ export function watchCurrentMemories(onMemories: (memories: GallerySession['memo
 
     const unsubsAuth = onAuthStateChanged(auth, user => {
       if (cancelled) return;
-      if (!user || auth.app.options.projectId !== 'lezz-val-universo') {
+      if (!authorized(user) || (expectedUid && user.uid !== expectedUid) || auth.app.options.projectId !== 'lezz-val-universo') {
         unsubsSnapshot?.();
         unsubsSnapshot = undefined;
+        onError?.();
         return;
       }
       if (unsubsSnapshot) return;
       const db = getFirestore(auth.app);
       unsubsSnapshot = onSnapshot(collection(db, 'memories'), snapshot => {
-        if (cancelled || auth.currentUser?.uid !== user.uid) return;
+        if (cancelled || auth.currentUser?.uid !== user.uid || snapshot.metadata.fromCache) return;
         onMemories(snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase')).sort((a, b) => b.date.localeCompare(a.date)));
       }, () => {
         if (!cancelled && auth.currentUser?.uid === user.uid && onError) onError();
@@ -76,6 +88,7 @@ export function watchCurrentMemories(onMemories: (memories: GallerySession['memo
       unsubsAuth();
     };
   } catch {
+    onError?.();
     return () => {};
   }
 }
@@ -118,17 +131,7 @@ export function connectGallery(): Promise<GallerySession> {
       if (epoch !== connectionEpoch) throw new Error('La conexión fue cancelada.');
       const result = await signInWithPopup(auth, new GoogleAuthProvider());
       if (epoch !== connectionEpoch) throw new Error('La conexión fue cancelada.');
-      const snapshot = await getDocs(collection(getFirestore(auth.app), 'memories'));
-      if (epoch !== connectionEpoch) throw new Error('La conexión fue cancelada.');
-      const memories = snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase'))
-        .sort((a, b) => b.date.localeCompare(a.date));
-      return {
-        memories,
-        uid: result.user.uid,
-        displayName: result.user.displayName || 'Nuestra galería',
-        email: result.user.email || '',
-        photoURL: result.user.photoURL || '',
-      };
+      return await verifiedSession(auth, result.user, epoch);
     } catch (error) {
       // An old popup may settle after cancellation. Clear it only if no newer
       // attempt has taken ownership; otherwise its cleanup must leave that
@@ -142,35 +145,15 @@ export function connectGallery(): Promise<GallerySession> {
 }
 
 /** Restores an existing persisted session across browser restarts. */
-export function restoreSavedSession(): Promise<GallerySession | null> {
-  return new Promise(resolve => {
-    try {
-      const auth = getGalleryAuth();
-      const unsubscribe = onAuthStateChanged(auth, async user => {
-        unsubscribe();
-        if (!user || auth.app.options.projectId !== 'lezz-val-universo') {
-          resolve(null);
-          return;
-        }
-        try {
-          const snapshot = await getDocs(collection(getFirestore(auth.app), 'memories'));
-          const memories = snapshot.docs.map(item => normalizeMemory(item.id, item.data(), 'firebase'))
-            .sort((a, b) => b.date.localeCompare(a.date));
-          resolve({
-            memories,
-            uid: user.uid,
-            displayName: user.displayName || 'Nuestra galería',
-            email: user.email || '',
-            photoURL: user.photoURL || '',
-          });
-        } catch {
-          resolve(null);
-        }
-      }, () => resolve(null));
-    } catch {
-      resolve(null);
-    }
-  });
+export async function restoreSavedSession(): Promise<GallerySession | null> {
+  const epoch = connectionEpoch;
+  try {
+    const auth = getGalleryAuth();
+    await authCleanup;
+    await auth.authStateReady();
+    if (epoch !== connectionEpoch || !authorized(auth.currentUser)) return null;
+    return await verifiedSession(auth, auth.currentUser, epoch);
+  } catch { return null; }
 }
 
 /** Ends only this app's Firebase session. Does not remove records, files or subscriptions. */
@@ -178,4 +161,25 @@ export async function disconnectGallery(): Promise<void> {
   connectionEpoch += 1;
   pendingConnection = undefined;
   if (galleryAuth) await queueSignOut(galleryAuth);
+}
+
+
+/** Raw Firestore wire records for backup only. Never restores or writes data. */
+export async function readGalleryBackupRecords(signal?: AbortSignal) {
+  const { auth, user } = requireConnectedGallery();
+  const documents: unknown[] = []; let pageToken: string | undefined;
+  do {
+    if (signal?.aborted || auth.currentUser !== user) throw new Error('La sesión cambió o se detuvo el respaldo.');
+    const url = new URL('https://firestore.googleapis.com/v1/projects/lezz-val-universo/databases/(default)/documents/memories');
+    url.searchParams.set('pageSize', '100'); if (pageToken) url.searchParams.set('pageToken', pageToken);
+    const response = await fetch(url, { headers: { Authorization: 'Bearer ' + await user.getIdToken() }, credentials: 'omit', redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error('No se pudieron confirmar los datos originales para el respaldo.');
+    const batch = await response.json() as { documents?: {name?:string}[]; nextPageToken?:string };
+    if (auth.currentUser !== user) throw new Error('La sesión cambió.');
+    if ((batch.documents ?? []).some(item => !item.name?.startsWith('projects/lezz-val-universo/databases/(default)/documents/memories/'))) throw new Error('El respaldo no pertenece a la galería independiente.');
+    documents.push(...(batch.documents ?? []));
+    if (documents.length > 10000) throw new Error('Divide el respaldo en colecciones más pequeñas.');
+    pageToken = batch.nextPageToken;
+  } while (pageToken);
+  return { format: 'firestore-wire-records/v1', project: 'lezz-val-universo', readAt: new Date().toISOString(), documents };
 }

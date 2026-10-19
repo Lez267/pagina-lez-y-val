@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { GallerySession, Memory } from '../data/types';
 import { useLocalState } from '../lib/storage';
 import { GalleryWorkspace } from './gallery';
@@ -38,6 +38,10 @@ export function GalleryPage({
   const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
   const [uploadReady, setUploadReady] = useState(false);
   const [publicationStatus, setPublicationStatus] = useState('');
+  const [backupStatus, setBackupStatus] = useState('');
+  const [backingUp, setBackingUp] = useState(false);
+  const backupAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => backupAbort.current?.abort(), []);
 
   useEffect(() => {
     if (!connected) return;
@@ -70,6 +74,18 @@ export function GalleryPage({
   const activeFavoriteIds = detectedPlayer === 'valeria' ? valFavoriteIds : aleFavoriteIds;
 
   return <>
+    <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',marginBottom:16}}>
+      <button type="button" className="button button-secondary" disabled={backingUp || !memories.length} onClick={async () => {
+        if (backingUp) return;
+        const controller = new AbortController(); backupAbort.current = controller; setBackingUp(true);
+        setBackupStatus('Preparando respaldo. Permite varias descargas si el navegador lo solicita.');
+        try { const api = await import('../lib/gallery-backup'); const rawRecords = connected ? await (await import('../data/firebase')).readGalleryBackupRecords(controller.signal) : undefined; const result = await api.downloadGalleryBackup(memories,{signal:controller.signal,onProgress:setBackupStatus,rawRecords});setBackupStatus(result.complete ? 'Respaldo completo: '+result.downloaded+' archivos en '+result.parts+' partes ZIP.' : 'Respaldo parcial: '+result.downloaded+' de '+result.total+' archivos. Consulta el manifiesto de la última parte; los originales se conservan.'); }
+        catch(error){setBackupStatus(error instanceof Error ? error.message : 'No se completó el respaldo. Tus recuerdos se conservan.');}
+        finally { setBackingUp(false); backupAbort.current = null; }
+      }}>Descargar recuerdos y archivos ZIP</button>
+      {backingUp && <button type="button" className="text-link" onClick={() => backupAbort.current?.abort()}>Detener descarga</button>}
+      {backupStatus && <span role="status">{backupStatus}</span>}
+    </div>
     <GalleryWorkspace
       memories={memories}
       favoriteIds={activeFavoriteIds}

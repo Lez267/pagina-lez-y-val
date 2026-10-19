@@ -12,7 +12,7 @@ test('distinct backup contents cannot share their local namespace merely by havi
 test('gallery connector exposes no data mutation or file upload operation', () => {
   const source = fs.readFileSync(new URL('../src/data/firebase.ts',import.meta.url),'utf8');
   assert.doesNotMatch(source,/\b(addDoc|setDoc|updateDoc|deleteDoc|writeBatch|runTransaction|uploadBytes|deleteObject)\b/);
-  assert.match(source,/getDocs\(collection\(getFirestore\(auth.app\), 'memories'\)\)/);
+  assert.doesNotMatch(source,/method\s*:\s*['"](?:POST|PUT|PATCH|DELETE)['"]/);
 });
 test('the new gallery is restricted to the independent Firebase project', () => {
   const config = fs.readFileSync(new URL('../src/data/firebase-config.ts',import.meta.url),'utf8');

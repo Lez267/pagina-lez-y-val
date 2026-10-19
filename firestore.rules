@@ -185,46 +185,85 @@ service cloud.firestore {
             && ownFavoriteChanges(before.get('favorites', []), after.get('favorites', []))))
         && (!changed.hasAny(['coverMediaId','coverMediaIndex']) || isValidCover(after, memoryId));
     }
-    // Shared studio records: history date is presentation; savedAt is authority.
-    function isValidStudioBase(data, recordId) {
-      return recordId.matches('[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}')
-        && data.keys().hasAll(['id','createdAt','createdBy','schemaVersion','savedAt'])
-        && data.id == recordId && data.schemaVersion == 1
-        && data.createdBy in ["bIlEa1IXdbO73ahuiESYy8Zbfgv1","DV7KauCOERWGAmEl38C5z0iPLuJ3","ToJa2Pea8scsqUVww1HHB1HIArE2"] && data.savedAt is timestamp
-        && data.createdAt is string && data.createdAt.size() <= 32
-        && data.createdAt.matches('[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9][.][0-9]{3}Z')
-        && isCalendarDate(data.createdAt[0:10]);
+    // Shared studio: optional presentation fields are compatible with old records.
+    // All edits atomically retain the exact preceding document in revisions/.
+    function uuid(value) { return value is string && value.matches('[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}'); }
+    function bounded(value, limit, required) { return value is string && value.size() <= limit && (!required || value.trim().size() > 0); }
+    function isoDate(value) {
+      return value is string && value.size() == 24
+        && value.matches('[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9][.][0-9]{3}Z')
+        && isCalendarDate(value[0:10]);
     }
-    function isValidLetter(data, recordId) {
-      return isValidStudioBase(data, recordId)
-        && data.keys().hasAll(['title','body','author','tag','occasion'])
-        && data.keys().hasOnly(['id','createdAt','createdBy','schemaVersion','savedAt','title','body','author','tag','occasion'])
-        && data.title is string && data.title.trim().size() > 0 && data.title.size() <= 100
-        && data.body is string && data.body.trim().size() > 0 && data.body.size() <= 12000
-        && data.author in ['Ale','Val'] && data.tag in ['Para hoy','Abre cuando']
-        && data.occasion is string && data.occasion.size() <= 120
-        && ((data.tag == 'Para hoy' && data.occasion == '') || (data.tag == 'Abre cuando' && data.occasion.trim().size() > 0));
+    function httpsUrl(value, limit) { return bounded(value, limit, true) && value.matches('https://[A-Za-z0-9.-]+([/?#].*)?'); }
+    function spotifyUrl(value) { return bounded(value, 500, true) && value.matches('https://open[.]spotify[.]com/(track|playlist|album)/[A-Za-z0-9]{1,100}'); }
+    function optionalUrl(data, key, limit) { return !(key in data) || httpsUrl(data[key], limit); }
+    function optionalText(data, key, limit) { return !(key in data) || bounded(data[key], limit, false); }
+    function startSeconds(data) { return !('startSeconds' in data) || (data.startSeconds is number && data.startSeconds >= 0 && data.startSeconds <= 86400); }
+    function letterSong(data) {
+      return data is map && data.keys().hasAll(['title','artist'])
+        && data.keys().hasOnly(['id','title','artist','artworkUrl','previewUrl','spotifyUrl','catalogUrl','startSeconds'])
+        && bounded(data.title,140,true) && bounded(data.artist,120,true)
+        && (!('id' in data) || bounded(data.id,128,true))
+        && optionalUrl(data,'artworkUrl',1200) && optionalUrl(data,'previewUrl',1200) && optionalUrl(data,'catalogUrl',1200)
+        && (!('spotifyUrl' in data) || spotifyUrl(data.spotifyUrl)) && startSeconds(data);
     }
-    function isValidSong(data, recordId) {
-      return isValidStudioBase(data, recordId)
-        && data.keys().hasAll(['title','artist','note','author','url','kind'])
-        && data.keys().hasOnly(['id','createdAt','createdBy','schemaVersion','savedAt','title','artist','note','author','url','kind'])
-        && data.title is string && data.title.trim().size() > 0 && data.title.size() <= 140
-        && data.artist is string && data.artist.trim().size() > 0 && data.artist.size() <= 120
-        && data.note is string && data.note.trim().size() > 0 && data.note.size() <= 2000
-        && data.author in ['Ale','Val'] && data.kind in ['track','playlist','album']
-        && data.url is string && data.url.size() <= 250
-        && data.url.matches('https://open[.]spotify[.]com/' + data.kind + '/[A-Za-z0-9]{1,100}');
+    function studioBase(data, id) {
+      return uuid(id) && data.keys().hasAll(['id','createdAt','createdBy','schemaVersion','savedAt','author'])
+        && data.id == id && data.schemaVersion == 1 && isoDate(data.createdAt)
+        && data.createdBy in ['bIlEa1IXdbO73ahuiESYy8Zbfgv1','DV7KauCOERWGAmEl38C5z0iPLuJ3','ToJa2Pea8scsqUVww1HHB1HIArE2']
+        && data.savedAt is timestamp && data.author in ['Ale','Val']
+        && (!('archived' in data) || data.archived is bool)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp)
+        && (!('revisionId' in data) || uuid(data.revisionId));
     }
-    function isValidPlan(data, recordId) {
-      return isValidStudioBase(data, recordId)
-        && data.keys().hasAll(['title','note','category','date','done','author'])
-        && data.keys().hasOnly(['id','createdAt','createdBy','schemaVersion','savedAt','title','note','category','date','done','author','updatedAt'])
-        && data.title is string && data.title.trim().size() > 0 && data.title.size() <= 140
-        && data.note is string && data.note.size() <= 2000
+    function studioLetter(data, id) {
+      return studioBase(data,id) && data.keys().hasAll(['title','body','tag','occasion'])
+        && bounded(data.title,100,true) && bounded(data.body,12000,true)
+        && data.tag in ['Para hoy','Abre cuando'] && bounded(data.occasion,120,data.tag == 'Abre cuando')
+        && (data.tag != 'Para hoy' || data.occasion == '')
+        && (!('color' in data) || data.color in ['rose','lavender','peach','mint','sky','gold'])
+        && (!('unlockAt' in data) || isoDate(data.unlockAt)) && (!('song' in data) || letterSong(data.song));
+    }
+    function studioSong(data, id) {
+      return studioBase(data,id) && data.keys().hasAll(['title','artist','note','url','kind'])
+        && bounded(data.title,140,true) && bounded(data.artist,120,true) && bounded(data.note,2000,true)
+        && data.kind in ['track','playlist','album']
+        && ((data.get('provider','spotify') == 'spotify' && spotifyUrl(data.url)
+            && data.url.matches('https://open[.]spotify[.]com/' + data.kind + '/[A-Za-z0-9]{1,100}'))
+          || (data.get('provider','spotify') == 'apple' && data.kind == 'track' && bounded(data.url,500,true)
+            && data.url.matches('https://(music|itunes)[.]apple[.]com/[A-Za-z]{2}/(album|song|music-video)/.*')))
+        && optionalUrl(data,'artworkUrl',1200) && optionalUrl(data,'previewUrl',1200) && startSeconds(data);
+    }
+    function studioPlan(data, id) {
+      return studioBase(data,id) && data.keys().hasAll(['title','note','category','date','done'])
+        && bounded(data.title,140,true) && bounded(data.note,2000,false)
         && data.category in ['Una cita','Una aventura','En casita','Por descubrir']
-        && isDateOrEmpty(data.date) && (data.date == '' || (data.date >= '1900-01-01' && data.date <= '2200-12-31'))
-        && data.author in ['Ale','Val'] && data.done is bool && (!('updatedAt' in data) || data.updatedAt is timestamp);
+        && isDateOrEmpty(data.date) && (data.date == '' || (data.date >= '1900-01-01' && data.date <= '2200-12-31')) && data.done is bool;
+    }
+    function studioValid(kind, data, id) { return kind == 'letters' ? studioLetter(data,id) : kind == 'songs' ? studioSong(data,id) : studioPlan(data,id); }
+    function contentKeys(kind) {
+      return kind == 'letters' ? ['title','body','tag','occasion','color','unlockAt','song']
+        : kind == 'songs' ? ['title','artist','note','url','kind','provider','artworkUrl','previewUrl','startSeconds']
+        : ['title','note','category','date','done'];
+    }
+    function studioCreate(kind, data, id) {
+      return studioValid(kind,data,id) && data.createdBy == request.auth.uid && data.savedAt == request.time
+        && data.keys().hasOnly(['id','createdAt','createdBy','schemaVersion','savedAt','author'].concat(contentKeys(kind)));
+    }
+    function recordedRevision(kind, id, before, after) {
+      let revision = after.get('revisionId','');
+      let record = getAfter(/databases/$(database)/documents/$(kind)/$(id)/revisions/$(revision)).data;
+      return uuid(revision) && revision != before.get('revisionId','')
+        && record.keys().hasAll(['before','editedBy','savedAt']) && record.keys().hasOnly(['before','editedBy','savedAt'])
+        && record.before == before && record.editedBy == request.auth.uid && record.savedAt == request.time;
+    }
+    function studioUpdate(kind, before, after, id) {
+      let difference = after.diff(before);
+      let removable = kind == 'letters' ? ['color','unlockAt','song'] : kind == 'songs' ? ['provider','artworkUrl','previewUrl','startSeconds'] : [];
+      return studioValid(kind,after,id) && (kind == 'plans' || before.createdBy == request.auth.uid)
+        && difference.affectedKeys().hasOnly(contentKeys(kind).concat(['archived','updatedAt','revisionId']))
+        && difference.removedKeys().hasOnly(removable)
+        && after.updatedAt == request.time && recordedRevision(kind,id,before,after);
     }
     match /memories/{memoryId} {
       allow read: if isVip();
@@ -232,34 +271,87 @@ service cloud.firestore {
       allow update: if resource != null && isVip() && isValidMemory(request.resource.data) && isValidUpdate(resource.data, request.resource.data, memoryId);
       allow delete: if false;
     }
-    match /letters/{recordId} {
-      allow read: if isVip();
-      allow create: if resource == null && isVip() && isValidLetter(request.resource.data, recordId)
-        && request.resource.data.createdBy == request.auth.uid && request.resource.data.savedAt == request.time;
-      allow update, delete: if false;
+    match /{kind}/{recordId} {
+      allow read: if kind in ['letters','songs','plans'] && isVip();
+      allow create: if kind in ['letters','songs','plans'] && isVip() && studioCreate(kind,request.resource.data,recordId);
+      allow update: if kind in ['letters','songs','plans'] && isVip() && studioUpdate(kind,resource.data,request.resource.data,recordId);
+      allow delete: if false;
+      match /revisions/{revisionId} {
+        allow read: if kind in ['letters','songs','plans','movies','reservations'] && isVip();
+        allow create: if kind in ['letters','songs','plans','movies','reservations'] && isVip() && uuid(revisionId)
+          && request.resource.data.keys().hasAll(['before','editedBy','savedAt'])
+          && request.resource.data.keys().hasOnly(['before','editedBy','savedAt'])
+          && request.resource.data.editedBy == request.auth.uid && request.resource.data.savedAt == request.time
+          && request.resource.data.before == get(/databases/$(database)/documents/$(kind)/$(recordId)).data
+          && getAfter(/databases/$(database)/documents/$(kind)/$(recordId)).data.revisionId == revisionId;
+        allow update, delete: if false;
+      }
     }
-    match /songs/{recordId} {
-      allow read: if isVip();
-      allow create: if resource == null && isVip() && isValidSong(request.resource.data, recordId)
-        && request.resource.data.createdBy == request.auth.uid && request.resource.data.savedAt == request.time;
-      allow update, delete: if false;
+    // Cinema preserves legacy fields; updates can only mark watched or archive.
+    function movieData(data,id) {
+      return data.keys().hasAll(['id','title','note','author','watched','createdAt']) && data.id == id
+        && id.matches('[A-Za-z0-9_-]{1,128}') && bounded(data.title,200,true) && bounded(data.note,10000,false)
+        && data.author in ['Ale','Val'] && data.watched is bool && isoDate(data.createdAt)
+        && (!('year' in data) || bounded(data.year,10,false) || (data.year is int && data.year >= 1880 && data.year <= 2300))
+        && optionalUrl(data,'poster',2048) && optionalText(data,'stars',1000)
+        && (!('watchedDate' in data) || isCalendarDate(data.watchedDate))
+        && optionalText(data,'duration',80) && optionalText(data,'classification',40) && optionalText(data,'format',80)
+        && (!('archived' in data) || data.archived is bool);
     }
-    match /plans/{recordId} {
+    function movieCreate(data,id) {
+      return movieData(data,id) && data.schemaVersion == 2 && data.createdBy == request.auth.uid && data.savedAt == request.time
+        && data.keys().hasAll(['schemaVersion','createdBy','savedAt'])
+        && data.keys().hasOnly(['id','title','note','author','watched','createdAt','schemaVersion','createdBy','savedAt','year','poster','stars','watchedDate','duration','classification','format']);
+    }
+    function movieUpdate(before,after,id) {
+      let changed = after.diff(before);
+      return movieData(after,id) && changed.removedKeys().size() == 0 && recordedRevision('movies',id,before,after)
+        && ((changed.affectedKeys().hasOnly(['watched','watchedDate','updatedAt','revisionId']) && after.updatedAt == request.time)
+          || (changed.affectedKeys().hasOnly(['archived','archivedAt','archivedBy','revisionId'])
+            && after.archived is bool && after.archivedAt == request.time && after.archivedBy == request.auth.uid
+            && (before.get('createdBy','') == request.auth.uid || (!('createdBy' in before) && before.author == (legacyAlias() == 'Alejandro' ? 'Ale' : 'Val')))));
+    }
+    match /movies/{id} {
       allow read: if isVip();
-      allow create: if resource == null && isVip() && isValidPlan(request.resource.data, recordId)
-        && !('updatedAt' in request.resource.data)
-        && request.resource.data.createdBy == request.auth.uid && request.resource.data.savedAt == request.time;
-      allow update: if resource != null && isVip() && isValidPlan(request.resource.data, recordId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['done','updatedAt'])
-        && request.resource.data.diff(resource.data).removedKeys().size() == 0
-        && request.resource.data.updatedAt == request.time;
+      allow create: if isVip() && movieCreate(request.resource.data,id);
+      allow update: if isVip() && movieUpdate(resource.data,request.resource.data,id);
       allow delete: if false;
     }
-    match /movies/{recordId} {
-      allow read, write: if isVip();
+    function reservationCreate(data,id) {
+      return uuid(id) && data.keys().hasAll(['id','movieId','movieTitle','dateName','showDate','showtime','reservedAt','schemaVersion','createdBy','savedAt','status'])
+        && data.keys().hasOnly(['id','movieId','movieTitle','dateName','showDate','showtime','reservedAt','schemaVersion','createdBy','savedAt','status','poster'])
+        && data.id == id && data.schemaVersion == 2 && data.createdBy == request.auth.uid && data.savedAt == request.time && data.status == 'active'
+        && data.movieId is string && data.movieId.matches('[A-Za-z0-9_-]{1,128}') && exists(/databases/$(database)/documents/movies/$(data.movieId))
+        && bounded(data.movieTitle,200,true) && bounded(data.dateName,100,true) && isCalendarDate(data.showDate)
+        && bounded(data.showtime,40,true) && isoDate(data.reservedAt) && optionalUrl(data,'poster',2048);
     }
-    match /reservations/{recordId} {
-      allow read, write: if isVip();
+    match /reservations/{id} {
+      allow read: if isVip();
+      allow create: if isVip() && reservationCreate(request.resource.data,id);
+      allow update: if isVip() && request.resource.data.diff(resource.data).removedKeys().size() == 0
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','cancelledAt','cancelledBy','revisionId'])
+        && recordedRevision('reservations',id,resource.data,request.resource.data)
+        && request.resource.data.status == 'cancelled' && request.resource.data.cancelledAt == request.time && request.resource.data.cancelledBy == request.auth.uid;
+      allow delete: if false;
+    }
+    function gameRecord(data,id) {
+      return data.keys().hasAll(['schemaVersion','uid','player','game','level','stars','score','completedAt','metricLabel','savedAt'])
+        && data.keys().hasOnly(['schemaVersion','uid','player','game','level','stars','score','completedAt','metricLabel','savedAt'])
+        && data.schemaVersion == 1 && data.uid == request.auth.uid
+        && data.player == (legacyAlias() == 'Alejandro' ? 'ale' : 'valeria')
+        && data.game in ['puzzle','memory','diamond'] && data.level is int && data.level >= 1 && data.level <= 5
+        && id == data.uid + '_' + data.game + '_' + string(data.level)
+        && data.stars is int && data.stars >= 1 && data.stars <= 3
+        && data.score is int && data.score >= 0 && data.score <= 10000
+        && isoDate(data.completedAt) && bounded(data.metricLabel,120,false) && data.savedAt == request.time;
+    }
+    match /gameRecords/{id} {
+      allow read: if isVip();
+      allow create: if isVip() && gameRecord(request.resource.data,id);
+      allow update: if isVip() && gameRecord(request.resource.data,id)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stars','score','completedAt','metricLabel','savedAt'])
+        && request.resource.data.stars >= resource.data.stars && request.resource.data.score >= resource.data.score;
+      allow delete: if false;
     }
     match /{document=**} { allow read, write: if false; }
   }

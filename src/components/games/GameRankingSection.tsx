@@ -42,7 +42,7 @@ export function GameRankingSection({
     verdictMessage = '¡Están exactamente empatados! Tienen la misma agilidad y complicidad en cada juego ♡';
   } else {
     leaderText = '🌟 ¡Que comience el juego!';
-    verdictMessage = 'Aún no han registrado partidas. Elijan su perfil arriba y superen el Nivel 1 de cualquier juego para sumar sus primeros puntos.';
+    verdictMessage = 'Aún no han registrado partidas. Superen el Nivel 1 de cualquier juego para sumar sus primeros puntos.';
   }
 
   // Determine game leaders

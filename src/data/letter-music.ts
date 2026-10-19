@@ -5,6 +5,7 @@ export interface LetterSong {
   artworkUrl?: string;
   previewUrl?: string;
   spotifyUrl?: string;
+  catalogUrl?: string;
   startSeconds?: number;
 }
 
@@ -64,13 +65,14 @@ export async function searchLetterSongs(query: string): Promise<LetterSong[]> {
     if (!Array.isArray(data.results)) return [];
 
     return data.results
-      .filter((r: any) => typeof r.previewUrl === 'string' && r.previewUrl.length > 0)
+      .filter((r: any) => Number.isSafeInteger(r.trackId) && typeof r.trackName === 'string' && typeof r.artistName === 'string' && typeof r.previewUrl === 'string' && r.previewUrl.startsWith('https://'))
       .map((r: any) => ({
-        id: String(r.trackId || Math.random()),
+        id: String(r.trackId),
         title: r.trackName || 'Sin título',
         artist: r.artistName || 'Artista desconocido',
         artworkUrl: typeof r.artworkUrl100 === 'string' ? r.artworkUrl100.replace('100x100bb', '200x200bb') : undefined,
         previewUrl: r.previewUrl,
+        catalogUrl: typeof r.trackViewUrl === 'string' ? r.trackViewUrl : undefined,
       }));
   } catch {
     return [];

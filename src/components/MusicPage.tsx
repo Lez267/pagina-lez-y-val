@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ArrowUpRight, Check, Clipboard, Disc3, Download, ExternalLink, Headphones, Heart, Music2, Pause, Play, Plus, Search, ShieldCheck, Sparkles, Trash2, Volume2, X } from 'lucide-react';
+import { ArrowUpRight, Check, Clipboard, Disc3, Download, ExternalLink, Headphones, Heart, Music2, Pause, Play, Plus, Pencil, Search, ShieldCheck, Sparkles, Trash2, Volume2, X } from 'lucide-react';
 import { downloadJson, useLocalState } from '../lib/storage';
 import { StudioDialog, StudioSprig, StudioStorageNotice, StudioSyncNotice, StudioShareButton, studioIsDemo } from './LettersPage';
-import { prependStudioLocal, spotifyLink, type StudioSong, type StudioAuthor } from '../data/studio-sync';
+import { connectedStudioUid, prependStudioLocal, reviseStudioLocal, safeStudioHttps, spotifyLink, studioMusicLink, type StudioSong, type StudioAuthor } from '../data/studio-sync';
 import { useStudioSync } from './useStudioSync';
 import { identifyGooglePlayer } from '../lib/game-progression';
 import type { GallerySession } from '../data/types';
@@ -18,6 +18,7 @@ export interface SearchSong {
   artworkUrl: string;
   previewUrl?: string;
   spotifyUrl?: string;
+  catalogUrl?: string;
 }
 
 const DEFAULT_CURATED_SONGS: SearchSong[] = [
@@ -28,7 +29,6 @@ const DEFAULT_CURATED_SONGS: SearchSong[] = [
     albumName: 'we fell in love in october / forget her - Single',
     artworkUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/08/dd/cd/08ddcdac-2d09-c7eb-d2ab-6b3849b04a02/5054526166202.jpg/200x200bb.jpg',
     previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/85/0b/0b/850b0b97-9255-b5f5-d05e-0e03a1e9b8e7/mzaf_9835609236239012360.plus.aac.p.m4a',
-    spotifyUrl: 'https://open.spotify.com/track/6IPwKM3fUUzlElbvKw2sKl',
   },
   {
     id: '1122782283',
@@ -37,7 +37,6 @@ const DEFAULT_CURATED_SONGS: SearchSong[] = [
     albumName: 'Parachutes',
     artworkUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/f5/93/8c/f5938c49-964c-31d1-4b33-78b634f71fb7/190295978075.jpg/200x200bb.jpg',
     previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/66/f3/1a/66f31a76-a6ed-cb4c-f353-23310a7ae9a8/mzaf_10593596652344378873.plus.aac.p.m4a',
-    spotifyUrl: 'https://open.spotify.com/track/3AJwUDP919kvQ9QcozQPxg',
   },
   {
     id: '727494441',
@@ -46,7 +45,6 @@ const DEFAULT_CURATED_SONGS: SearchSong[] = [
     albumName: 'Daltónico',
     artworkUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/2c/aa/d0/2caad0c3-6bc5-2148-f0bb-16551c8dfe16/05099991760456.rgb.jpg/200x200bb.jpg',
     previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/6e/0b/16/6e0b1651-3989-7c56-b8a4-7d07599b4168/mzaf_3284769617460277443.plus.aac.p.m4a',
-    spotifyUrl: 'https://open.spotify.com/track/1fV9d2Ehy2s55gT2s2yU5M',
   },
   {
     id: '1440832990',
@@ -55,7 +53,6 @@ const DEFAULT_CURATED_SONGS: SearchSong[] = [
     albumName: 'Mon Laferte, Vol. 1 (Edición Especial)',
     artworkUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/93/d0/4a/93d04ae9-c2bc-dfe9-6bdc-8d1f92647405/16UMGIM02512.rgb.jpg/200x200bb.jpg',
     previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/cf/de/96/cfde9636-88a5-ca62-06de-e5111d471501/mzaf_16739751041575702200.plus.aac.p.m4a',
-    spotifyUrl: 'https://open.spotify.com/track/41lMpm3h858Y6uVfCg3vC9',
   },
   {
     id: '1468058173',
@@ -64,7 +61,6 @@ const DEFAULT_CURATED_SONGS: SearchSong[] = [
     albumName: 'Lover',
     artworkUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Music125/v4/49/3d/ab/493dab54-f920-9043-6181-80993b8116c9/19UMGIM53909.rgb.jpg/200x200bb.jpg',
     previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview211/v4/e0/db/47/e0db47b0-7f70-0631-0414-cd4777d2fb3e/mzaf_6362891154838442638.plus.aac.p.m4a',
-    spotifyUrl: 'https://open.spotify.com/track/1dGr1nsAZkt7oUBVvnnlZa',
   },
   {
     id: '1622045962',
@@ -73,9 +69,8 @@ const DEFAULT_CURATED_SONGS: SearchSong[] = [
     albumName: 'Un Verano Sin Ti',
     artworkUrl: 'https://is1-ssl.mzstatic.com/image/thumb/Music112/v4/3e/04/eb/3e04ebf6-370f-f59d-ec84-2c2643db92f1/196626945068.jpg/200x200bb.jpg',
     previewUrl: 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/72/ae/81/72ae81c2-4ef3-b998-40b6-563c0609509f/mzaf_12868850384306577273.plus.aac.p.m4a',
-    spotifyUrl: 'https://open.spotify.com/track/3k3NWokhb03ffu8bmGR4bl',
   },
-];
+].map(song => ({ ...song, catalogUrl: `https://music.apple.com/mx/song/${song.id}` }));
 
 const demoDedications: Dedication[] = [
   {
@@ -96,15 +91,7 @@ const kindNames: Record<Dedication['kind'], string> = {
   album: 'Álbum',
 };
 
-export function extractSpotifyEmbed(rawUrl: string, title?: string): { kind: string; id: string; embedUrl: string } | null {
-  if (title && title.toLowerCase().includes('yoko')) {
-    return {
-      kind: 'track',
-      id: '6dlZryuz7NIz20faRoZV4k',
-      embedUrl: 'https://open.spotify.com/embed/track/6dlZryuz7NIz20faRoZV4k?utm_source=generator&theme=0',
-    };
-  }
-
+export function extractSpotifyEmbed(rawUrl: string, _title?: string): { kind: string; id: string; embedUrl: string } | null {
   const link = spotifyLink(rawUrl);
   if (!link) return null;
   const match = link.url.match(/\/(track|playlist|album)\/([a-zA-Z0-9]+)/);
@@ -137,7 +124,9 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
 
   const sync = useStudioSync(namespace, 'songs', stored);
   const dedications = sync.rows.map(row => row.item);
-  const activeDedications = dedications.filter(song => !deletedIds.includes(song.id));
+  const [showArchived, setShowArchived] = useState(false);
+  const isArchived = (song: Dedication) => (song as Dedication & { archived?: boolean }).archived === true || deletedIds.includes(song.id);
+  const activeDedications = dedications.filter(song => showArchived === isArchived(song));
 
   // Identificar el usuario conectado con Google (Ale vs Val)
   const currentUserAuthor: StudioAuthor | null = session
@@ -145,12 +134,15 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
     : null;
 
   const canDeleteSong = (song: Dedication): boolean => {
-    if (!currentUserAuthor) return true; // Modo invitado
+    const creator = (song as Dedication & { createdBy?: string }).createdBy;
+    if (creator) return creator === connectedStudioUid(namespace);
+    if (!currentUserAuthor) return true;
     return song.author === currentUserAuthor;
   };
 
   const identity = useRef<{ id: string; createdAt: string } | null>(null);
   const [compose, setCompose] = useState(false);
+  const [editingSong, setEditingSong] = useState<Dedication | null>(null);
   const [composeMode, setComposeMode] = useState<'search' | 'link'>('search');
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
@@ -206,14 +198,15 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
   // Auto-cargar carátula y preview para canciones que no las tengan en metaStore (ej. enlaces directos o sincronizados)
   useEffect(() => {
     activeDedications.forEach(async (dedication) => {
-      if (metaStore[dedication.id]?.artworkUrl) return;
+      if (dedication.artworkUrl || metaStore[dedication.id]?.artworkUrl) return;
       try {
         const query = `${dedication.title} ${dedication.artist}`.trim();
         if (!query) return;
         const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(query)}&entity=song&limit=1`);
         if (!res.ok) return;
         const data = (await res.json()) as { results?: any[] };
-        const best = data?.results?.[0];
+        const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const best = data?.results?.find((item: any) => typeof item.trackName === 'string' && typeof item.artistName === 'string' && normalize(item.trackName) === normalize(dedication.title) && normalize(item.artistName) === normalize(dedication.artist));
         if (best && typeof best.artworkUrl100 === 'string') {
           const artworkUrl = best.artworkUrl100.replace('100x100bb', '200x200bb');
           setMetaStore(prev => {
@@ -334,6 +327,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
 
   const startCompose = () => {
     identity.current = null;
+    setEditingSong(null);
     setError('');
     sync.clearError();
     setInputUrl('');
@@ -354,12 +348,23 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
     setCompose(true);
   };
 
+  const startEdit = (song: Dedication) => {
+    if (!canDeleteSong(song)) return;
+    startCompose();
+    setEditingSong(song);
+    setInputTitle(song.title); setInputArtist(song.artist); setInputNote(song.note); setInputAuthor(song.author);
+    setInputUrl(song.url); setComposeMode('link');
+    const meta = { ...metaStore[song.id], ...song };
+    setPreviewCover(meta.artworkUrl ?? null); setSelectedStartSeconds(meta.startSeconds ?? 0);
+    setSelectedSong({ id: song.id, trackName: song.title, artistName: song.artist, albumName: '', artworkUrl: meta.artworkUrl ?? '', previewUrl: meta.previewUrl, ...(spotifyLink(song.url) ? { spotifyUrl: song.url } : { catalogUrl: song.url }) });
+  };
+
   const closeCompose = () => {
     stopPreview();
     setCompose(false);
   };
 
-  const exportMusic = () => downloadJson('nuestra-historia-canciones.json', { ...sync.exportData, dedications: activeDedications });
+  const exportMusic = () => downloadJson('nuestra-historia-canciones.json', { ...sync.exportData, dedications, localMetadata: metaStore, hiddenLocalIds: deletedIds });
 
   // Búsqueda en catálogo de música (estilo Instagram)
   const performSearch = async (term: string) => {
@@ -382,14 +387,14 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
       if (res.ok) {
         const data = (await res.json()) as { results?: any[] };
         if (Array.isArray(data.results) && data.results.length > 0) {
-          const list: SearchSong[] = data.results.map((r: any) => ({
-            id: String(r.trackId || Math.random()),
+          const list: SearchSong[] = data.results.filter((r: any) => Number.isSafeInteger(r.trackId) && typeof r.trackName === 'string' && typeof r.artistName === 'string' && typeof r.trackViewUrl === 'string' && !!studioMusicLink(r.trackViewUrl)).map((r: any) => ({
+            id: String(r.trackId),
             trackName: r.trackName || 'Sin título',
             artistName: r.artistName || 'Artista desconocido',
             albumName: r.collectionName || '',
             artworkUrl: typeof r.artworkUrl100 === 'string' ? r.artworkUrl100.replace('100x100bb', '200x200bb') : '',
             previewUrl: r.previewUrl,
-            spotifyUrl: `https://open.spotify.com/track/${String(r.trackId || '').replace(/[^a-zA-Z0-9]/g, '') || 'track01'}`,
+            catalogUrl: r.trackViewUrl,
           }));
           setSearchResults(list);
         } else {
@@ -424,8 +429,8 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
     setInputTitle(song.trackName);
     setInputArtist(song.artistName);
     setPreviewCover(song.artworkUrl);
-    // Auto-asignar URL canónica para que NO sea necesario pedir enlace al seleccionar canción
-    const autoUrl = song.spotifyUrl || `https://open.spotify.com/track/${String(song.id).replace(/[^a-zA-Z0-9]/g, '') || 'track01'}`;
+    // Conservar el proveedor y el enlace del resultado elegido
+    const autoUrl = song.spotifyUrl || song.catalogUrl || '';
     setInputUrl(autoUrl);
     setAutoDetectedInfo(`Canción elegida: «${song.trackName}» de ${song.artistName}`);
     setError('');
@@ -446,6 +451,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
 
   // Detección automática al ingresar el enlace de Spotify
   async function handleUrlInput(newUrl: string) {
+    setSelectedSong(null); setPreviewCover(null); setSelectedStartSeconds(0); stopPreview();
     let cleaned = newUrl.trim();
     const uriMatch = cleaned.match(/^spotify:(track|playlist|album):([a-zA-Z0-9]+)$/);
     if (uriMatch) {
@@ -473,35 +479,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
           setPreviewCover(data.thumbnail_url);
         }
 
-        // Auto-detectar Artista buscando en el catálogo musical con el título
-        if (foundTitle) {
-          try {
-            const itunesRes = await fetch(
-              `https://itunes.apple.com/search?term=${encodeURIComponent(foundTitle)}&entity=song&limit=3`
-            );
-            if (itunesRes.ok) {
-              const itunesData = (await itunesRes.json()) as { results?: any[] };
-              const best = itunesData.results?.[0];
-              if (best && typeof best.artistName === 'string') {
-                setInputArtist(best.artistName);
-                setAutoDetectedInfo(`✓ Artista y canción detectados: «${foundTitle}» de ${best.artistName}`);
-                setSelectedSong({
-                  id: String(best.trackId || 'spotify-link'),
-                  trackName: foundTitle,
-                  artistName: best.artistName,
-                  albumName: best.collectionName || '',
-                  artworkUrl: (typeof data.thumbnail_url === 'string' ? data.thumbnail_url : best.artworkUrl100) || '',
-                  previewUrl: best.previewUrl,
-                  spotifyUrl: link.url,
-                });
-              } else {
-                setAutoDetectedInfo(`✓ Título detectado de Spotify: «${foundTitle}»`);
-              }
-            }
-          } catch {
-            setAutoDetectedInfo(`✓ Título detectado de Spotify: «${foundTitle}»`);
-          }
-        }
+        if (foundTitle) setAutoDetectedInfo(`Título obtenido de Spotify: «${foundTitle}». Confirma el artista y la versión.`);
       }
     } catch {
       // Ignorar fallas de red: el usuario puede seguir escribiendo manualmente
@@ -510,15 +488,17 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
     }
   }
 
-  function handleDeleteSong(song: Dedication) {
-    setDeletedIds(prev => [...(Array.isArray(prev) ? prev : []), song.id]);
-    setStored((prev: unknown) => Array.isArray(prev) ? prev.filter((item: any) => item?.id !== song.id) : prev);
-    setMetaStore(prev => {
-      const next = { ...prev };
-      delete next[song.id];
-      return next;
-    });
-    setStatus(`Canción «${song.title}» eliminada.`);
+  async function handleDeleteSong(song: Dedication, archived = true) {
+    if (!canDeleteSong(song)) { setError('Sólo la cuenta que creó esta dedicatoria puede archivarla.'); return; }
+    const row = sync.rows.find(row => row.item.id === song.id);
+    if (row?.scope === 'shared') {
+      if (!await sync.archive(song, archived)) return;
+    } else {
+      try { setStored(reviseStudioLocal(stored, row?.localId ?? song.id, { archived })); }
+      catch (failure) { setError((failure as Error).message); return; }
+    }
+    if (!archived) setDeletedIds(previous => previous.filter(id => id !== song.id && id !== row?.localId));
+    setStatus(`Dedicatoria «${song.title}» ${archived ? 'archivada; su contenido e historial se conservan' : 'restaurada'}.`);
     setSongToDelete(null);
   }
 
@@ -528,10 +508,10 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
     const artist = inputArtist.trim();
     const note = inputNote.trim();
 
-    // Si seleccionó una canción del catálogo y no tiene URL manual, auto-generar URL canónica
+    // El catálogo aporta su enlace real; no se generan identificadores de otro proveedor
     let urlToUse = inputUrl.trim();
     if (!urlToUse && selectedSong) {
-      urlToUse = selectedSong.spotifyUrl || `https://open.spotify.com/track/${String(selectedSong.id).replace(/[^a-zA-Z0-9]/g, '') || 'track01'}`;
+      urlToUse = selectedSong.spotifyUrl || selectedSong.catalogUrl || '';
     }
 
     if (!title || !artist || !note) {
@@ -544,25 +524,35 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
       return;
     }
 
-    if (!urlToUse) {
-      urlToUse = `https://open.spotify.com/track/${crypto.randomUUID().replace(/[^a-zA-Z0-9]/g, '').slice(0, 22)}`;
-    }
-
-    const link = spotifyLink(urlToUse);
+    const link = studioMusicLink(urlToUse);
     if (!link) {
-      setError('El enlace de Spotify no es válido. Debe tener el formato https://open.spotify.com/track/…');
+      setError('Selecciona una canción del catálogo o pega su enlace real de Spotify o Apple Music.');
       return;
     }
 
     identity.current ??= { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
     const dedication: Dedication = {
-      ...identity.current,
+      ...(editingSong ? { id: editingSong.id, createdAt: editingSong.createdAt } : identity.current),
       title,
       artist,
       note,
-      author: currentUserAuthor ?? inputAuthor,
+      author: editingSong?.author ?? currentUserAuthor ?? inputAuthor,
       ...link,
+      ...((selectedSong?.artworkUrl || previewCover) && safeStudioHttps(selectedSong?.artworkUrl || previewCover) ? { artworkUrl: selectedSong?.artworkUrl || previewCover! } : {}),
+      ...(safeStudioHttps(selectedSong?.previewUrl) ? { previewUrl: selectedSong.previewUrl } : {}),
+      ...(selectedStartSeconds > 0 ? { startSeconds: selectedStartSeconds } : {}),
     };
+
+    if (editingSong) {
+      const row = sync.rows.find(row => row.item.id === editingSong.id);
+      if (row?.scope === 'shared') { if (!await sync.update(editingSong, dedication)) return; }
+      else {
+        try { setStored(reviseStudioLocal(stored, row?.localId ?? editingSong.id, dedication as unknown as Record<string, unknown>)); }
+        catch (failure) { setError((failure as Error).message); return; }
+      }
+      setMetaStore(previous => ({ ...previous, [dedication.id]: { artworkUrl: dedication.artworkUrl, previewUrl: dedication.previewUrl, startSeconds: dedication.startSeconds } }));
+      closeCompose(); setEditingSong(null); setStatus('Dedicatoria actualizada y confirmada; conservamos su versión anterior.'); return;
+    }
 
     const localOnly = !sync.connected || (event.nativeEvent as SubmitEvent).submitter?.getAttribute('value') === 'local';
     if (!localOnly) {
@@ -598,7 +588,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
       <div className="studio-page-heading">
         <div>
           <h1 className="page-title" id="music-title">Canciones</h1>
-          <p className="muted studio-intro">Canciones que nos dedicamos y que forman la banda sonora de nuestra historia con reproductor oficial de Spotify.</p>
+          <p className="muted studio-intro">Canciones que nos dedicamos: muestras del catálogo de Apple y reproductor oficial para los enlaces de Spotify.</p>
         </div>
       </div>
 
@@ -614,7 +604,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
             De Ale para Val 💕
           </span>
           <h2>Canciones con dedicatoria</h2>
-          <p>Elige canciones buscando como en Instagram o conectando tus favoritas de Spotify para escucharlas juntas con su carátula oficial.</p>
+          <p>Elige canciones buscando como en Instagram o pegando los enlaces de tus favoritas de Spotify para escucharlas juntas con su carátula oficial.</p>
           <button type="button" className="button-primary studio-banner-cta-btn" onClick={() => startCompose()}>
             <Plus size={17} /> Dedicar una canción
           </button>
@@ -625,6 +615,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
 
       <div className="studio-toolbar">
         <p className="studio-section-label">Nuestras dedicatorias <span>{activeDedications.length}</span></p>
+        <button type="button" className="studio-export" onClick={() => setShowArchived(value => !value)}>{showArchived ? "Ver dedicatorias" : "Ver archivo"}</button>
         <button type="button" className="studio-export" onClick={exportMusic}>
           <Download size={14} /> Exportar
         </button>
@@ -634,7 +625,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
         {activeDedications.map((dedication, index) => {
           const embed = extractSpotifyEmbed(dedication.url, dedication.title);
           const canDelete = canDeleteSong(dedication);
-          const meta = metaStore[dedication.id];
+          const meta = { ...metaStore[dedication.id], ...dedication };
           const coverArt = meta?.artworkUrl;
           const previewAudio = meta?.previewUrl;
           const isPlayingThis = playingPreviewUrl === previewAudio;
@@ -700,13 +691,13 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
                   href={
                     embed?.id
                       ? `https://open.spotify.com/${embed.kind}/${embed.id}`
-                      : (spotifyLink(dedication.url)?.url ?? `https://open.spotify.com/search/${encodeURIComponent(dedication.title + ' ' + dedication.artist)}`)
+                      : (studioMusicLink(dedication.url)?.url ?? `https://open.spotify.com/search/${encodeURIComponent(dedication.title + ' ' + dedication.artist)}`)
                   }
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={`Abrir ${dedication.title} en Spotify`}
+                  aria-label={`Abrir ${dedication.title} en ${dedication.provider === "apple" ? "Apple Music" : "Spotify"}`}
                 >
-                  <Headphones size={15} /> Abrir en Spotify <ArrowUpRight size={14} />
+                  <Headphones size={15} /> Abrir en {dedication.provider === "apple" ? "Apple Music" : "Spotify"} <ArrowUpRight size={14} />
                 </a>
               </div>
 
@@ -725,7 +716,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
                         busy={sync.busy}
                         error={sync.error}
                         onShare={async () => {
-                          const ok = await sync.share(dedication);
+                          const ok = await sync.share({ ...dedication, artworkUrl: meta?.artworkUrl, previewUrl: meta?.previewUrl, startSeconds: meta?.startSeconds });
                           if (ok) setStatus('Dedicatoria compartida. El borrador local se conserva.');
                           return ok;
                         }}
@@ -733,19 +724,20 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
                     )}
                   </div>
 
+                  {canDelete && <button type="button" className="studio-letter-edit-btn" onClick={() => startEdit(dedication)}><Pencil size={13} /> Editar</button>}
                   {canDelete ? (
                     <button
                       type="button"
                       className="studio-letter-delete-btn"
-                      onClick={() => setSongToDelete(dedication)}
-                      title="Eliminar canción"
+                      onClick={() => isArchived(dedication) ? void handleDeleteSong(dedication, false) : setSongToDelete(dedication)}
+                      title={isArchived(dedication) ? "Restaurar dedicatoria" : "Archivar dedicatoria"}
                     >
-                      <Trash2 size={13} /> Borrar
+                      <Trash2 size={13} /> {isArchived(dedication) ? "Restaurar" : "Archivar"}
                     </button>
                   ) : (
                     <span
                       className="studio-letter-protected-badge"
-                      title={`Esta canción fue dedicada por ${dedication.author} para ${dedication.author === 'Ale' ? 'Val' : 'Ale'}. Solo el autor puede eliminarla.`}
+                      title={`Esta canción fue dedicada por ${dedication.author} para ${dedication.author === 'Ale' ? 'Val' : 'Ale'}. Sólo la cuenta que la creó puede editarla o archivarla.`}
                     >
                       <Heart size={11} fill="currentColor" /> De {dedication.author} para {dedication.author === 'Ale' ? 'Val' : 'Ale'}
                     </span>
@@ -770,7 +762,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
       )}
 
       <p className="studio-footnote">
-        <Music2 size={13} /> Reproduce las canciones directamente desde los reproductores de Spotify o ábrelas en tu aplicación.
+        <Music2 size={13} /> Escucha las muestras disponibles o abre la canción en su proveedor. Los enlaces Spotify usan su reproductor oficial.
       </p>
       <p className="studio-status" role="status">{status}</p>
 
@@ -1113,13 +1105,13 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
                 <div className="studio-spotify-connect-box">
                   <div className="studio-spotify-connect-header">
                     <Headphones size={15} style={{ color: '#1db954' }} />
-                    <span>Enlace oficial de Spotify</span>
+                    <span>Enlace de Spotify o Apple Music</span>
                     {inputUrl && spotifyLink(inputUrl) && (
-                      <span className="studio-spotify-connected-badge"><Check size={12} /> Conectado</span>
+                      <span className="studio-spotify-connected-badge"><Check size={12} /> Enlace válido</span>
                     )}
                   </div>
                   <p className="studio-spotify-connect-desc">
-                    Pega el enlace de la canción para que se reproduzca con el reproductor de Spotify:
+                    Pega el enlace real de la canción. Spotify ofrece su reproductor; Apple Music abre su catálogo.
                   </p>
 
                   <div className="studio-spotify-actions-row">
@@ -1153,7 +1145,7 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
                     aria-invalid={!!error}
                   />
                   <span className="studio-input-help" id="studio-spotify-help">
-                    Al pegar el enlace, se detectan automáticamente el título, el artista y la carátula oficial.
+                    Podemos obtener el título de Spotify. Confirma el artista y la versión antes de guardar. No conecta tu cuenta ni importa tu biblioteca.
                   </span>
                 </div>
               )}
@@ -1241,13 +1233,13 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
                 <button type="button" className="button-secondary" disabled={sync.busy} onClick={closeCompose}>
                   Cancelar
                 </button>
-                {sync.connected && (
+                {!editingSong && sync.connected && (
                   <button type="submit" name="destination" value="local" className="button-secondary" disabled={sync.busy}>
                     Guardar solo aquí
                   </button>
                 )}
                 <button type="submit" className="button-primary" disabled={sync.busy}>
-                  <Heart size={16} /> {sync.busy ? "Confirmando…" : sync.connected ? "Compartir dedicatoria" : "Guardar dedicatoria aquí"}
+                  <Heart size={16} /> {sync.busy ? "Confirmando…" : editingSong ? "Guardar cambios" : sync.connected ? "Compartir dedicatoria" : "Guardar dedicatoria aquí"}
                 </button>
               </div>
             </fieldset>
@@ -1258,16 +1250,18 @@ function MusicContent({ namespace, session }: { namespace: string; session?: Gal
       {/* Modal de confirmación para eliminar canción */}
       {songToDelete && (
         <StudioDialog
-          title="¿Eliminar esta canción?"
-          subtitle={`«${songToDelete.title}» se borrará de nuestra música. Esta acción no se puede deshacer.`}
+          busy={sync.busy}
+          title="¿Archivar esta dedicatoria?"
+          subtitle={`«${songToDelete.title}» quedará en el archivo; su contenido y las versiones anteriores se conservan.`}
           onClose={() => setSongToDelete(null)}
         >
+          {(sync.error || error) && <p className="studio-form-error" role="alert">{sync.error || error}</p>}
           <div className="studio-form-actions" style={{ marginTop: '20px' }}>
             <button type="button" className="button-secondary" onClick={() => setSongToDelete(null)}>
               Cancelar
             </button>
-            <button type="button" className="button-destructive" onClick={() => handleDeleteSong(songToDelete)}>
-              <Trash2 size={15} /> Eliminar canción
+            <button type="button" className="button-destructive" disabled={sync.busy} onClick={() => handleDeleteSong(songToDelete)}>
+              <Trash2 size={15} /> Archivar dedicatoria
             </button>
           </div>
         </StudioDialog>

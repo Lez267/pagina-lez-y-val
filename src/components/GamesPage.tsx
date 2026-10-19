@@ -15,11 +15,16 @@ import {
   calculateDiamondScore,
   getPlayerOverallStats,
   recordLevelCompletion,
-  identifyGooglePlayer,
+  playerForUid,
+  meetsLevelObjective,
+  puzzleLevelKey,
+  diamondLevelKey,
+  ownsLegacyBoard,
   mergeProgressionStores,
   PLAYERS,
 } from '../lib/game-progression';
 import type { GameProgressionStore, GameType, PlayerGameProgress, PlayerId } from '../lib/game-progression';
+import { gameRecordsProgress, gameSyncError, ownGameRecordDrafts, saveGameRecord, watchGameRecords } from '../data/game-sync';
 import { GameLevelBar } from './games/GameLevelBar';
 import { GameRankingSection } from './games/GameRankingSection';
 import './games.css';
@@ -120,21 +125,23 @@ function GamesSession({
   }, [localPhoto, photos]);
 
   const detectedPlayer = useMemo(() => {
-    return identifyGooglePlayer(session, namespace);
+    return session?.uid && namespace === `nh:user:${session.uid}` ? playerForUid(session.uid) : null;
   }, [session, namespace]);
 
   const initialProgression = useMemo<GameProgressionStore>(() => {
     const base = createDefaultProgressionStore();
     const legacy1 = readLocal<GameProgressionStore | null>(`${namespace}:game-progression:v1`, null);
     const legacy2 = readLocal<GameProgressionStore | null>('nh:couple:game-progression:v1', null);
+    const legacy3 = readLocal<GameProgressionStore | null>('nh:couple:game-progression:v2', null);
     let merged = base;
     if (legacy1) merged = mergeProgressionStores(merged, legacy1);
     if (legacy2) merged = mergeProgressionStores(merged, legacy2);
+    if (legacy3) merged = mergeProgressionStores(merged, legacy3);
     return merged;
   }, [namespace]);
 
   const [rawProgression, setProgression] = useLocalState<GameProgressionStore>(
-    'nh:couple:game-progression:v2',
+    `${namespace}:game-progression:v3`,
     initialProgression
   );
 
@@ -149,22 +156,39 @@ function GamesSession({
   }, [detectedPlayer, rawProgression?.activePlayer, setProgression]);
 
   const progressionStore = useMemo<GameProgressionStore>(() => {
-    const base = createDefaultProgressionStore();
-    if (!rawProgression) return base;
-    return {
-      activePlayer: rawProgression.activePlayer === 'ale' ? 'ale' : 'valeria',
-      valeria: {
-        puzzle: rawProgression.valeria?.puzzle ?? base.valeria.puzzle,
-        memory: rawProgression.valeria?.memory ?? base.valeria.memory,
-        diamond: rawProgression.valeria?.diamond ?? base.valeria.diamond,
-      },
-      ale: {
-        puzzle: rawProgression.ale?.puzzle ?? base.ale.puzzle,
-        memory: rawProgression.ale?.memory ?? base.ale.memory,
-        diamond: rawProgression.ale?.diamond ?? base.ale.diamond,
-      },
-    };
-  }, [rawProgression]);
+    const merged = mergeProgressionStores(createDefaultProgressionStore(), rawProgression);
+    return { ...merged, activePlayer: detectedPlayer ?? merged.activePlayer };
+  }, [rawProgression, detectedPlayer]);
+  const progressionRef = useRef(progressionStore);
+  progressionRef.current = progressionStore;
+  const mounted = useRef(true);
+  const [syncMessage, setSyncMessage] = useState('Los tableros se guardan en este navegador. Tus récords se comparten con tu cuenta de Google.');
+  const [syncing, setSyncing] = useState(false);
+  useEffect(() => {
+    mounted.current = true;
+    if (!detectedPlayer) return () => { mounted.current = false; };
+    let active = true;
+    const stop = watchGameRecords(namespace, (records, cached) => {
+      if (!active) return;
+      const next = mergeProgressionStores(progressionRef.current, gameRecordsProgress(records));
+      next.activePlayer = detectedPlayer;
+      progressionRef.current = next;
+      setProgression(next);
+      setSyncMessage(cached ? 'Mostrando récords guardados; esperamos confirmación de la nube.' : 'Récords compartidos actualizados, combinados con los históricos de este navegador. Puedes sincronizar tus récords guardados con el botón de abajo.');
+    }, message => { if (active) setSyncMessage(message); });
+    return () => { active = false; mounted.current = false; stop(); };
+  }, [namespace, detectedPlayer, setProgression]);
+
+  async function shareOwnRecords() {
+    if (!detectedPlayer || syncing) return;
+    setSyncing(true);
+    setSyncMessage('Confirmando tus récords de este navegador…');
+    const results = await Promise.allSettled(ownGameRecordDrafts(progressionRef.current, session?.uid ?? '').map(({ game, record }) => saveGameRecord(namespace, game, record)));
+    if (!mounted.current) return;
+    setSyncing(false);
+    const failed = results.find(result => result.status === 'rejected');
+    setSyncMessage(failed?.status === 'rejected' ? gameSyncError(failed.reason) : 'Tus récords están confirmados en la nube. Los récords históricos de la otra persona siguen intactos en este navegador.');
+  }
 
   const activePlayerId: PlayerId = progressionStore.activePlayer;
   const activePlayerData = progressionStore[activePlayerId];
@@ -182,11 +206,18 @@ function GamesSession({
   }
 
   function handleRecordLevel(game: GameType, level: number, stars: 1 | 2 | 3, score: number, metricLabel: string) {
-    setProgression(prev => {
-      const current = prev || createDefaultProgressionStore();
-      const active = current.activePlayer === 'ale' ? 'ale' : 'valeria';
-      return recordLevelCompletion(current, active, game, level, stars, score, metricLabel);
-    });
+    const current = progressionRef.current;
+    const active = detectedPlayer ?? current.activePlayer;
+    const next = recordLevelCompletion(current, active, game, level, stars, score, metricLabel);
+    progressionRef.current = next;
+    setProgression(next);
+    if (!detectedPlayer) return;
+    const record = next[detectedPlayer][game].levels[level];
+    if (!record) return;
+    setSyncMessage('Récord guardado aquí; confirmando en la nube…');
+    void saveGameRecord(namespace, game, record).then(() => {
+      if (mounted.current) setSyncMessage('Récord confirmado y compartido.');
+    }).catch(error => { if (mounted.current) setSyncMessage(gameSyncError(error)); });
   }
 
   useEffect(() => () => { if (objectUrl.current) URL.revokeObjectURL(objectUrl.current); }, []);
@@ -211,7 +242,7 @@ function GamesSession({
 
     {selection.mode !== 'memory' && selection.mode !== 'ranking' && (
       <section className="card game-photo-picker" aria-label="Fotografía para jugar">
-        <div className="game-chosen-photo">{photo ? <img src={photo.url} alt="" loading="lazy" /> : <span className="game-photo-placeholder"><ImagePlus /></span>}<div><span className="eyebrow">Foto seleccionada</span><strong>{photo?.title ?? 'Elige una fotografía'}</strong><p className="muted game-small">Cada foto y dificultad conserva su propia partida en este navegador.</p></div></div>
+        <div className="game-chosen-photo">{photo ? <img src={photo.url} alt="" loading="lazy" /> : <span className="game-photo-placeholder"><ImagePlus /></span>}<div><span className="eyebrow">Foto seleccionada</span><strong>{photo?.title ?? 'Elige una fotografía'}</strong><p className="muted game-small">Cada foto y nivel conserva su propia partida en este navegador.</p></div></div>
         <details className="game-photo-choices"><summary className="button button-secondary"><ImagePlus size={16} /> Cambiar fotografía</summary><div className="game-photo-options">
           {photos.length > 0 && <div className="game-photo-grid">{photos.map(item => <button type="button" key={item.id} className={photo?.id === item.id ? 'is-selected' : ''} onClick={() => setSelection({ ...selection, photoId: item.id })} aria-label={`Jugar con ${item.title}`} aria-pressed={photo?.id === item.id}><img src={item.url} alt="" loading="lazy" /><span>{item.title}</span>{photo?.id === item.id && <Check size={16} />}</button>)}</div>}
           <p className="muted game-small">Cambiar de foto conserva el avance de la anterior. Las imágenes de la galería siguen intactas.</p><button className="button button-secondary" type="button" onClick={() => fileInput.current?.click()}><ImagePlus size={16} /> Usar foto de este dispositivo</button>
@@ -234,7 +265,7 @@ function GamesSession({
         />
       ) : selection.mode === 'memory' ? (
         <MemoryGame
-          key={`${namespace}:memory:${allPhotos.length}:${memoryLevel}:${activePlayerId}`}
+          key={`${namespace}:memory:${allPhotos.map(item => item.id).join('|')}:${memoryLevel}:${activePlayerId}`}
           photos={allPhotos}
           namespace={namespace}
           level={memoryLevel}
@@ -274,7 +305,9 @@ function GamesSession({
         />
       )}
     </section>
-    <p className="game-privacy-note"><Heart size={14} aria-hidden="true" /> El avance y ranking se guardan sólo en este navegador. Ningún juego edita, elimina ni vuelve a subir tus recuerdos.</p>
+    <p className="game-save-state" role="status">{syncMessage}</p>
+    {detectedPlayer && <button type="button" className="button button-secondary" disabled={syncing} onClick={() => { void shareOwnRecords(); }}><Users size={16} /> {syncing ? 'Confirmando récords…' : 'Sincronizar mis récords guardados'}</button>}
+    <p className="game-privacy-note"><Heart size={14} aria-hidden="true" /> Los récords se comparten por cuenta; los tableros en curso se guardan aquí. Ningún juego edita, elimina ni vuelve a subir tus recuerdos.</p>
   </div>;
 }
 
@@ -298,8 +331,11 @@ function PuzzleGame({
   onRecordResult: (stars: 1 | 2 | 3, score: number, metric: string) => void;
 }) {
   const size: PuzzleSize = level >= 5 ? 5 : level >= 3 ? 4 : 3;
-  const initial = useMemo(() => newPuzzle(size), [size]);
-  const [stored, setGame, saved] = useLocalState(`${namespace}:puzzle:v1:${photo.id}:${size}`, initial);
+  const initial = useMemo(() => {
+    const legacy = ownsLegacyBoard('puzzle', level, size) ? readLocal<unknown>(`${namespace}:puzzle:v1:${photo.id}:${size}`, null) : null;
+    return validPuzzle(legacy, size) ? legacy : newPuzzle(size);
+  }, [namespace, photo.id, level, size]);
+  const [stored, setGame, saved] = useLocalState(puzzleLevelKey(namespace, photo.id, level, size), initial);
   const game = validPuzzle(stored, size) ? stored : initial;
   const [selected, setSelected] = useState<number | null>(null);
   const [numbers, setNumbers] = useState(false);
@@ -312,6 +348,7 @@ function PuzzleGame({
   const pieces = useRef<(HTMLButtonElement | null)[]>([]);
   const complete = isSolved(game.tiles);
   const correct = correctTiles(game.tiles);
+  const objectiveMet = complete && meetsLevelObjective('puzzle', level, game.moves);
 
   const scoreResult = useMemo(() => {
     return calculatePuzzleScore(level, game.moves, game.hints);
@@ -319,11 +356,11 @@ function PuzzleGame({
 
   const recordedRef = useRef(false);
   useEffect(() => {
-    if (complete && !recordedRef.current) {
+    if (objectiveMet && !recordedRef.current) {
       recordedRef.current = true;
       onRecordResult(scoreResult.stars, scoreResult.score, `${game.moves} movs`);
     }
-  }, [complete, scoreResult, onRecordResult, game.moves]);
+  }, [objectiveMet, scoreResult, onRecordResult, game.moves]);
 
   useEffect(() => {
     const img = new Image();
@@ -415,9 +452,9 @@ function PuzzleGame({
       {complete && <div className="game-celebration" role="status">
         <Flower2 size={29} />
         <div>
-          <strong>¡Nivel {level} completado por {activePlayerName}!</strong>
+          <strong>{objectiveMet ? `¡Nivel ${level} completado por ${activePlayerName}!` : 'Foto armada. Reintenta para cumplir el objetivo del nivel.'}</strong>
           <p>{game.moves} movimientos y {game.hints} {game.hints === 1 ? 'pista' : 'pistas'}.</p>
-          <div className="celebration-stars-score">
+          {objectiveMet && <div className="celebration-stars-score">
             <div className="celebration-stars">
               {[1, 2, 3].map(s => (
                 <Star
@@ -429,8 +466,8 @@ function PuzzleGame({
               ))}
             </div>
             <span className="celebration-pts">+{scoreResult.score} pts</span>
-          </div>
-          {level < 5 && (
+          </div>}
+          {objectiveMet && level < 5 && (
             <button
               type="button"
               className="button button-primary celebration-next-btn"
@@ -451,7 +488,7 @@ function PuzzleGame({
         <span className="eyebrow">Dificultad Progresiva</span>
         <h3>Nivel {level} de 5</h3>
         <p className="muted game-small">
-          Tablero actual: <strong>{size} × {size} ({size * size} piezas)</strong>.
+          Tablero actual: <strong>{size} × {size} ({size * size} piezas)</strong>. {level === 2 ? 'Objetivo: menos de 20 movimientos.' : level === 4 ? 'Objetivo: menos de 40 movimientos.' : 'Objetivo: armar todas las piezas.'}
         </p>
         <div className="game-progress-label"><span>Piezas en su lugar</span><strong>{correct} / {size * size}</strong></div>
         <progress className="game-progress" max={size * size} value={correct} aria-label="Piezas correctamente colocadas" />
@@ -469,7 +506,7 @@ function PuzzleGame({
           <button className="button button-secondary" onClick={() => setPreview(true)}><Eye size={16} /> Ver fotografía</button>
           <button className="button button-secondary" onClick={giveHint} disabled={complete}><Sparkles size={16} /> Una pista</button>
           <button className="button button-secondary" onClick={() => { setGame(undoPuzzle(game)); setSelected(null); setHint(null); }} disabled={!game.history.length}><Undo2 size={16} /> Deshacer movimiento</button>
-          <button className="button button-secondary" onClick={() => setConfirmation({ title: '¿Mezclamos este recuerdo?', body: 'Se reiniciarán los movimientos y el avance de esta partida en este dispositivo. La fotografía, el recuerdo y las otras partidas se conservan.', action: () => { setGame(newPuzzle(size)); setSelected(null); setHint(null); } })}><Shuffle size={16} /> Mezclar de nuevo</button>
+          <button className="button button-secondary" onClick={() => setConfirmation({ title: '¿Mezclamos este recuerdo?', body: 'Se reiniciarán los movimientos y el avance de esta partida en este dispositivo. La fotografía, el recuerdo y las otras partidas se conservan.', action: () => { recordedRef.current = false; setGame(newPuzzle(size)); setSelected(null); setHint(null); } })}><Shuffle size={16} /> Mezclar de nuevo</button>
         </div>
         <label className="game-checkbox"><input type="checkbox" checked={numbers} onChange={event => setNumbers(event.target.checked)} /> Mostrar números en las piezas</label>
         <p className={`game-save-state ${saved ? '' : 'game-error'}`} role="status">{saved ? 'Avance guardado en este navegador' : 'No se pudo guardar. El almacenamiento del navegador está lleno o deshabilitado.'}</p>
@@ -819,10 +856,11 @@ function PaintingBoard({
   activePlayerName: string;
   onRecordResult: (stars: 1 | 2 | 3, score: number, metric: string) => void;
 }) {
-  const key = `${namespace}:diamond:v1:${photo.id}:${pattern.fingerprint}`;
+  const key = diamondLevelKey(namespace, photo.id, level, pattern.fingerprint);
   const initial: PaintState = { fingerprint: pattern.fingerprint, painted: [], history: [] };
   const [game, setGame] = useState<PaintState>(() => {
-    const stored = readLocal<unknown>(key, null);
+    const legacy = ownsLegacyBoard('diamond', level, density) ? readLocal<unknown>(`${namespace}:diamond:v1:${photo.id}:${pattern.fingerprint}`, null) : null;
+    const stored = readLocal<unknown>(key, legacy);
     return validPaintState(stored, pattern) ? stored : initial;
   });
   const current = useRef(game);
@@ -846,6 +884,8 @@ function PaintingBoard({
   const lastCell = useRef<number | null>(null);
   const pan = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const completed = game.painted.length === pattern.cells.length;
+  const completedRatio = game.painted.length / pattern.cells.length;
+  const objectiveMet = density === (level >= 4 ? 'hd' : 'standard') && meetsLevelObjective('diamond', level, completedRatio);
   const painted = useMemo(() => new Set(game.painted), [game.painted]);
   const remaining = useMemo(
     () => pattern.palette.map((_, index) => pattern.cells.reduce((count, target, cell) => count + Number(target === index && !painted.has(cell)), 0)),
@@ -853,16 +893,16 @@ function PaintingBoard({
   );
 
   const scoreResult = useMemo(() => {
-    return calculateDiamondScore(level, 1.0);
-  }, [level]);
+    return calculateDiamondScore(level, completedRatio);
+  }, [level, completedRatio]);
 
-  const recordedRef = useRef(false);
+  const recordedRef = useRef(0);
   useEffect(() => {
-    if (completed && !recordedRef.current) {
-      recordedRef.current = true;
-      onRecordResult(scoreResult.stars, scoreResult.score, '100% completado');
+    if (objectiveMet && scoreResult.score > recordedRef.current) {
+      recordedRef.current = scoreResult.score;
+      onRecordResult(scoreResult.stars, scoreResult.score, `${Math.floor(completedRatio * 100)}% completado`);
     }
-  }, [completed, scoreResult, onRecordResult]);
+  }, [objectiveMet, scoreResult, completedRatio, onRecordResult]);
 
   function persist(next: PaintState) { current.current = next; setGame(next); setSaved(writeLocal(key, next)); }
   function finishStroke() {
@@ -1073,7 +1113,7 @@ function PaintingBoard({
         playerProgress={playerProgress}
         activePlayerName={activePlayerName}
         onSelectLevel={lvl => {
-          recordedRef.current = false;
+          recordedRef.current = 0;
           onSelectLevel(lvl);
         }}
       />
@@ -1163,11 +1203,11 @@ function PaintingBoard({
       <p className="game-small game-cursor-status" aria-live="polite">
         Casilla {cursor + 1} · símbolo {SYMBOLS[pattern.cells[cursor] % SYMBOLS.length]}{painted.has(cursor) ? ' · diamante colocado' : ''}. {feedback}
       </p>
-      {completed && <div className="game-celebration" role="status">
+      {objectiveMet && <div className="game-celebration" role="status">
         <Gem size={29} />
         <div>
           <strong>¡Nivel {level} de Diamantitos completado por {activePlayerName}!</strong>
-          <p>Colocaron todos los diamantitos 5D. La obra luce como un auténtico cuadro de piedritas brillante.</p>
+          <p>{completed ? 'Colocaron todos los diamantitos 5D. Tu cuadro está completo.' : `Objetivo alcanzado con ${Math.floor(completedRatio * 100)}%. Puedes seguir pintando para mejorar tus estrellas.`}</p>
           <div className="celebration-stars-score">
             <div className="celebration-stars">
               {[1, 2, 3].map(s => (
@@ -1186,7 +1226,7 @@ function PaintingBoard({
               type="button"
               className="button button-primary celebration-next-btn"
               onClick={() => {
-                recordedRef.current = false;
+                recordedRef.current = 0;
                 onSelectLevel(level + 1);
               }}
             >
@@ -1275,7 +1315,7 @@ function PaintingBoard({
           <strong>{Math.round(game.painted.length / pattern.cells.length * 100)}%</strong>
         </div>
         <progress className="game-progress" max={pattern.cells.length} value={game.painted.length} aria-label="Diamantitos colocados" />
-        <p className="muted game-small">{game.painted.length} de {pattern.cells.length} diamantitos colocados</p>
+        <p className="muted game-small">{game.painted.length} de {pattern.cells.length} diamantitos colocados. Para superar este nivel, usa el lienzo {level >= 4 ? 'HD' : 'estándar'} y alcanza {level === 1 ? '25%' : level === 2 || level === 4 ? '75%' : '100%'}.</p>
 
         <div className="game-control-buttons">
           <button
@@ -1298,7 +1338,7 @@ function PaintingBoard({
           <button className="button button-secondary" disabled={!game.history.length} onClick={undo}>
             <Undo2 size={16} /> Deshacer último trazo
           </button>
-          <button className="button button-secondary" onClick={() => setConfirmation({ title: '¿Empezamos este cuadro de nuevo?', body: 'Se borrará sólo el avance local de este cuadro en este dispositivo. La fotografía, el recuerdo y tus otras partidas se conservan.', action: () => { finishStroke(); persist(initial); setFeedback('Un lienzo listo para volver a empezar.'); } })}>
+          <button className="button button-secondary" onClick={() => setConfirmation({ title: '¿Empezamos este cuadro de nuevo?', body: 'Se borrará sólo el avance local de este cuadro en este dispositivo. La fotografía, el recuerdo y tus otras partidas se conservan.', action: () => { finishStroke(); recordedRef.current = 0; persist(initial); setFeedback('Un lienzo listo para volver a empezar.'); } })}>
             <RotateCcw size={16} /> Reiniciar cuadro
           </button>
         </div>
@@ -1362,8 +1402,12 @@ function MemoryGame({
   const [seconds, setSeconds] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
   const [previewPhoto, setPreviewPhoto] = useState<Photo | null>(null);
+  const pairTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (pairTimer.current) clearTimeout(pairTimer.current); }, []);
 
   useEffect(() => {
+    recordedRef.current = false;
+    if (pairTimer.current) clearTimeout(pairTimer.current);
     setCards(createMemoryDeck(photos, pairCount));
     setFlippedIndices([]);
     setMatchedPairIds([]);
@@ -1382,6 +1426,7 @@ function MemoryGame({
   }, [timerRunning]);
 
   const complete = cards.length > 0 && isMemoryComplete(matchedPairIds, pairCount);
+  const objectiveMet = complete && meetsLevelObjective('memory', level, moves);
 
   useEffect(() => {
     if (complete) {
@@ -1395,11 +1440,11 @@ function MemoryGame({
 
   const recordedRef = useRef(false);
   useEffect(() => {
-    if (complete && !recordedRef.current) {
+    if (objectiveMet && !recordedRef.current) {
       recordedRef.current = true;
       onRecordResult(scoreResult.stars, scoreResult.score, `${moves} intentos · ${formatTime(seconds)}`);
     }
-  }, [complete, scoreResult, onRecordResult, moves, seconds]);
+  }, [objectiveMet, scoreResult, onRecordResult, moves, seconds]);
 
   function handleCardClick(index: number) {
     if (isChecking || complete) return;
@@ -1427,7 +1472,7 @@ function MemoryGame({
         setFlippedIndices([]);
       } else {
         setIsChecking(true);
-        setTimeout(() => {
+        pairTimer.current = setTimeout(() => {
           setFlippedIndices([]);
           setIsChecking(false);
         }, 900);
@@ -1436,6 +1481,7 @@ function MemoryGame({
   }
 
   function startNewGame() {
+    if (pairTimer.current) clearTimeout(pairTimer.current);
     recordedRef.current = false;
     setCards(createMemoryDeck(photos, pairCount));
     setFlippedIndices([]);
@@ -1447,6 +1493,7 @@ function MemoryGame({
   }
 
   function restartCurrent() {
+    if (pairTimer.current) clearTimeout(pairTimer.current);
     recordedRef.current = false;
     setFlippedIndices([]);
     setMatchedPairIds([]);
@@ -1569,11 +1616,11 @@ function MemoryGame({
             <div className="memorama-victory-icon">
               <Heart size={30} fill="currentColor" />
             </div>
-            <h3>¡Nivel {level} completado por {activePlayerName}!</h3>
+            <h3>{objectiveMet ? `¡Nivel ${level} completado por ${activePlayerName}!` : 'Todas las parejas encontradas. Reintenta dentro del límite para pasar de nivel.'}</h3>
             <p>
               Completaron las <strong>{pairCount} parejas</strong> en <strong>{moves} intentos</strong> y un tiempo de <strong>{formatTime(seconds)}</strong>.
             </p>
-            <div className="celebration-stars-score" style={{ justifyContent: 'center' }}>
+            {objectiveMet && <div className="celebration-stars-score" style={{ justifyContent: 'center' }}>
               <div className="celebration-stars">
                 {[1, 2, 3].map(s => (
                   <Star
@@ -1585,9 +1632,9 @@ function MemoryGame({
                 ))}
               </div>
               <span className="celebration-pts">+{scoreResult.score} pts</span>
-            </div>
+            </div>}
             <div className="memorama-victory-actions">
-              {level < 5 && (
+              {objectiveMet && level < 5 && (
                 <button
                   type="button"
                   className="button button-primary celebration-next-btn"

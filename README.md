@@ -1,56 +1,65 @@
 # Nuestro pequeño universo · Ale & Val
 
-Jardín floral con React, TypeScript y Vinext sobre Workers. La galería anterior y su despliegue Vercel siguen independientes.
+Aplicación privada de la pareja, con Next.js, React y TypeScript, preparada para Vercel.
 
-## Datos y conservación
+Estado de esta revisión y pasos pendientes de publicación: [ESTADO-ENTREGA.md](ESTADO-ENTREGA.md).
 
-La nueva aplicación se conecta exclusivamente a **lezz-val-universo**. Se copiaron y verificaron 16 publicaciones, sus campos originales y 189 URLs distintas de Cloudinary; las tres identidades Google conservaron sus UID. Las dos suscripciones push antiguas quedaron en el respaldo y no se reutilizan. La copia corresponde a un momento concreto: las publicaciones posteriores de ambas webs no se replican entre proyectos.
+## Conservar los datos
 
-Los proyectos originales no se editan desde esta carpeta. Las reglas nuevas niegan todas las eliminaciones y la aplicación no incluye operaciones para borrar publicaciones o archivos. La edición actual cambia detalles, portada, recordatorios y favoritos; conserva los medios y campos desconocidos del documento original.
+La aplicación usa exclusivamente Firebase **lezz-val-universo**. La galería original y sus archivos Cloudinary permanecen independientes. Las publicaciones posteriores de una web no se copian automáticamente a la otra.
 
-Las nuevas fotos y videos usan un identificador aleatorio bajo `nuestro-universo/`, con `overwrite=false`. El preset de subida antiguo sigue aparte. La firma se prepara en el servidor después de verificar la firma RS256 del token Firebase, su proyecto, proveedor Google, correo verificado y UID autorizado. El secreto Cloudinary nunca se entrega al cliente. El API Key de Cloudinary forma parte del formulario firmado que exige su API; el API Secret permanece en el servidor.
+No hay operaciones de eliminación de recuerdos ni archivos Cloudinary. Los nuevos archivos se firman en el servidor, usan identificadores únicos en nuestro-universo/ y overwrite=false. Editar detalles o portada no sustituye ni reordena medios. Se leen los formatos antiguos sin reescribirlos.
 
-Límites del formulario: 20 archivos, 20 MB por imagen, 100 MB por video y 250 MB por publicación. El servidor verifica el tamaño **declarado** y firma formatos permitidos; esa firma no certifica el número de bytes del archivo real. Se aplican también los límites de la cuenta Cloudinary.
+Cartas, canciones, planes, películas y reservas conservan su contenido al archivar o cancelar. Los cambios compartidos guardan la versión anterior exacta en una subcolección revisions, en la misma transacción. Un formulario de cartas/planes desactualizado se rechaza para evitar sobrescrituras silenciosas. Campos desconocidos de documentos anteriores se conservan.
 
-Los respaldos privados de Firestore/Auth y las credenciales están fuera de esta carpeta y del repositorio. No ejecutar restauraciones ni utilidades de limpieza contra el proyecto original. El motor de copia conserva los valores Firestore originales; la normalización visual de esta web no sirve para restaurar datos.
+Los borradores del navegador no se comparten automáticamente. Cine separa sus fuentes locales y remotas; un snapshot vacío no borra sus pendientes. Importar crea un respaldo del archivo original antes de mezclar. Los conflictos reciben otro identificador. Los ajustes antiguos que sólo existían en un navegador se conservan allí y se comparten al editar/confirmar desde ese dispositivo.
 
-## Funciones
+## Acceso y funciones
 
-- Galería con búsqueda, etiquetas, colecciones, favoritos compartidos, visor de fotos/videos y navegación entre archivos/publicaciones.
-- Publicación de nuevos recuerdos mediante subidas firmadas; edición conservadora de sus detalles y portada.
-- Historias de publicaciones recientes, recuerdos de este día, aniversarios y recordatorios en pantalla. Las historias dejan de mostrarse por fecha, sin borrar su publicación.
-- Línea del tiempo basada en la fecha de los recuerdos.
-- Cartas, canciones/dedicatorias y planes compartidos mediante Google, con actualizaciones entre dispositivos. Los borradores locales anteriores permanecen en su almacenamiento y se comparten únicamente al confirmarlo.
-- Guardado local opcional y exportación JSON de cartas, canciones y planes. Los ejemplos y respaldos abiertos conservan su espacio local separado.
-- Enlaces validados a canciones, playlists y álbumes Spotify. No hay conexión OAuth con la cuenta Spotify, reproducción sincronizada ni importación de su biblioteca.
-- Rompecabezas 3×3/4×4 y diamantitos Canvas con progreso local.
+- Entrada con Google; sólo las tres identidades autorizadas y verificadas pueden leer o escribir. Una sesión JSON local no abre la aplicación. La sesión Firebase se restaura tras verificar token y lectura del servidor.
+- Galería: publicaciones nuevas, detalles, portada, favoritos por cuenta, búsqueda, colecciones, historias, recordatorios y visor de fotos/videos.
+- Cartas: contenido, canción, color y fecha compartidos; edición con historial, archivo y restauración. La apertura programada es una sorpresa visual, no cifrado ni secreto frente a otra cuenta autorizada.
+- Música: enlaces Spotify reales con su embed y muestras del catálogo Apple. No se convierten identificadores iTunes en Spotify. Conectar cuentas/importar bibliotecas mediante OAuth requiere una aplicación propia de Spotify y no se presenta como ya conectado.
+- Planes: edición y estado compartidos, sin overrides locales que oculten actualizaciones remotas.
+- Cine: fechas de México dinámicas, reservas con fecha exacta, confirmaciones de guardado, archivo/restauración e historial de cancelación. Un boleto exportado usa su reserva, no la pestaña visible.
+- Juegos: partidas por foto/nivel/tamaño, objetivos aplicados, reintentos que permiten mejorar récords. Los récords se sincronizan por UID; las partidas en curso siguen en el dispositivo. El historial local propio se comparte expresamente, sin publicar automáticamente resultados de la pareja.
+- ZIP de galería: descargas por partes con fotos/videos, JSON original de Firestore, vista y manifiesto SHA256. Informa CORS, interrupciones y archivos mayores de 110 MB sin afirmar respaldo completo. Deben permitirse varias descargas. No restaura ni modifica Firebase.
+- Respaldo JSON de cine incluye reservas y fuentes originales. El diálogo de galería también exporta borradores/partidas del dispositivo.
+- PWA: caché versionado con el build actual de Next y pantalla sin conexión. No almacena documentos Firebase, API, fotos remotas ni audio mediante el service worker. Necesita conexión para verificar el acceso inicial.
 - Regalo de Valeria enlazado a su dirección original.
-- PWA con manifiesto, iconos y caché de interfaz/imágenes de ejemplo; sin caché de documentos Firebase, fotos remotas ni API de firmas.
 
-La interfaz inicial identifica sus imágenes de ejemplo. Al abrir Google se utiliza la galería independiente; abrir un JSON sólo consulta el archivo en ese navegador, sin enviarlo ni restaurarlo en Firebase.
+Los recordatorios actuales son dentro de la web; las notificaciones push requieren su integración y configuración propias. No se reutilizan suscripciones del proyecto anterior.
 
-## Alcance pendiente
+## Desarrollo y publicación
 
-Esta revisión no declara paridad completa con todas las funciones históricas: no incluye notificaciones push, exportación ZIP de todos los archivos ni añadir/sustituir medios dentro de una publicación existente. Los recordatorios actuales se consultan dentro de la web. Los enlaces Cloudinary conservan sus permisos de entrega originales; el acceso privado de la web no cambia por sí mismo la privacidad de esos enlaces.
+Requiere Node >=22.13.0.
 
-No se crean publicaciones o archivos de prueba en producción. La primera subida real y la instalación PWA en sus teléfonos requieren comprobarse con ustedes.
-
-## Desarrollo
-
-Requiere Node 22.13 o posterior.
-
-```sh
+~~~sh
 npm ci
 npm run dev
 npm test
 npm run build
 npm start
-```
+~~~
 
-El desarrollo sirve el puerto 5173. `npm start` utiliza el Worker compilado de `dist/server/wrangler.json`. La publicación se prepara con los helpers Sites, conservando `.openai/hosting.json` y el ID del sitio existente; no es un despliegue estático Vite ni debe apuntar al repositorio original.
+Desarrollo: puerto 5173. Producción local: Next en el puerto 3000. En Vercel seleccionar el framework Next.js y usar npm run build. El service worker se genera con .next/static y public después de compilar; no usa dist de Vinext.
 
-Variables de servidor: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` y `FIREBASE_ALLOWED_UIDS`. En Sites se guardan como secretos de ejecución. No usar prefijos públicos, no incluirlas en el manifiesto ni versionar archivos privados. La configuración web de Firebase es pública; las reglas y la autenticación controlan sus permisos.
+Este proyecto se publica automáticamente en Vercel al subir cambios a la rama de GitHub conectada. No es necesario iniciar sesión con la CLI de Vercel para ese flujo. Las reglas de Firestore se despliegan por separado y deben coordinarse con la nueva versión de la web.
 
-Next 16.3.8 y el override Sharp 0.35.5 corrigen los avisos detectados en las dependencias del servidor. La auditoría de dependencias de producción dio cero avisos conocidos durante esta revisión; esto no sustituye las pruebas de autorización y conservación de datos.
+Configurar en el servidor Vercel las cuatro variables de .env.example. Los valores secretos nunca llevan NEXT_PUBLIC_, no se incluyen en el repositorio ni se envían al navegador. El Firebase Web SDK tiene configuración pública; la protección está en Auth y reglas.
 
-Las pruebas cubren normalización, enlaces peligrosos, fechas, juegos, aislamiento de proyectos, preservación de medios, edición parcial, favoritos propios, firma de subidas, tokens adulterados, límites HTTP, idempotencia y conservación de borradores. Las reglas se prueban adicionalmente con Firestore Emulator fuera del sitio, incluyendo copias privadas en memoria de los 16 documentos originales.
+Autorizar los dominios finales en Firebase Authentication. El proyecto preparado es lezz-val-universo, no galeria-lezz-y-val.
+
+Desplegar únicamente las reglas del proyecto nuevo, después de comprobar la versión de la web:
+
+~~~sh
+npx firebase-tools deploy --only firestore:rules --project lezz-val-universo
+~~~
+
+Ese comando no migra documentos ni elimina índices. No ejecutar restauraciones ni limpiezas sobre el proyecto original. Los respaldos privados están fuera de esta carpeta.
+
+## Verificación
+
+Las pruebas locales cubren normalización, conservación de medios y borradores, fechas, identidad, firmas/token, límites HTTP, datos compartidos y progresión. Las reglas se verifican adicionalmente en un emulador demo, con autorización, historial exacto, denegación de borrados y compatibilidad de los trece formatos de películas existentes. Las pruebas no añaden contenido ficticio a producción.
+
+I've set up prototype Security Rules to keep the data in Firestore safe. They are designed to be secure for the fixed verified Google identities, immutable media and creation fields, append-only history, bounded new data and denied deletions. However, you should review and verify them before broadly sharing your app. If you'd like, I can help you harden these rules.

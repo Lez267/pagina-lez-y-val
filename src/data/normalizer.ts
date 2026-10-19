@@ -1,4 +1,5 @@
 import type { MediaItem, Memory } from './types';
+import { decodePublicationMedia } from '../lib/publication';
 
 type RecordData = Record<string, unknown>;
 
@@ -92,22 +93,24 @@ export function normalizeMemory(id: string, raw: unknown, source: Memory['source
   const media: MediaItem[] = [];
   const seenUrls = new Map<string, MediaItem>();
   const usedMediaIds = new Set<string>();
-  for (const candidate of candidates) {
+  for (const [candidateIndex, candidate] of candidates.entries()) {
     const item = typeof candidate === 'string' ? { url: candidate } : asRecord(candidate);
-    const url = safeMediaUrl(item.url);
+    const compact = record.schemaVersion === 2 ? decodePublicationMedia(item.url) : null;
+    if (record.schemaVersion === 2 && !compact) continue;
+    const url = compact?.url ?? safeMediaUrl(item.url);
     if (!url) continue;
-    const storagePath = text(item.storagePath);
+    const storagePath = compact?.storagePath ?? text(item.storagePath);
     const duplicate = seenUrls.get(url);
     if (duplicate) {
       if (!duplicate.storagePath && storagePath) duplicate.storagePath = storagePath;
-      if (mediaType(item.type, url) === 'video') duplicate.type = 'video';
+      if ((compact?.type ?? mediaType(item.type, url)) === 'video') duplicate.type = 'video';
       continue;
     }
-    const requestedId = text(item.id);
+    const requestedId = compact ? `${id}-media-${candidateIndex + 1}` : text(item.id);
     let mediaId = /^[A-Za-z0-9_-]{1,180}$/.test(requestedId) && !usedMediaIds.has(requestedId) ? requestedId : `${id}-media-${media.length + 1}`;
     while (usedMediaIds.has(mediaId)) mediaId += '-next';
     usedMediaIds.add(mediaId);
-    const normalized: MediaItem = { id: mediaId, url, type: mediaType(item.type, url), ...(storagePath ? { storagePath } : {}) };
+    const normalized: MediaItem = { id: mediaId, url, type: compact?.type ?? mediaType(item.type, url), ...(storagePath ? { storagePath } : {}) };
     seenUrls.set(url, normalized);
     media.push(normalized);
   }

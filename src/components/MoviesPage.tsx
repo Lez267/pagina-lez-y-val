@@ -24,8 +24,8 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { downloadJson, readLocal, writeLocal, useLocalState } from '../lib/storage';
-import { StudioDialog, studioIsDemo } from './LettersPage';
+import { downloadJson, readLocal, writeLocal } from '../lib/storage';
+import { StudioDialog } from './LettersPage';
 import { identifyGooglePlayer } from '../lib/game-progression';
 import type { GallerySession } from '../data/types';
 import type { StudioAuthor } from '../data/studio-sync';
@@ -35,11 +35,19 @@ import {
   watchFirestoreMovies,
   watchFirestoreReservations,
   saveMovieToFirestore,
-  deleteMovieFromFirestore,
+  archiveMovieInFirestore,
+  setMovieWatchedInFirestore,
   saveReservationToFirestore,
-  deleteReservationFromFirestore,
-  batchUploadMoviesToFirestore,
-  batchUploadReservationsToFirestore,
+  cancelReservationInFirestore,
+  localCinemaMovies,
+  localCinemaReservations,
+  mergeCinemaMovies,
+  mergeCinemaReservations,
+  activeCinemaReservations,
+  cinemaDateOptions,
+  cinemaToday,
+  movieCreateFields,
+  parseCinemaImport,
 } from '../data/movies-sync';
 export type { StudioMovie, MovieReservation };
 import './studio.css';
@@ -579,163 +587,152 @@ const QUICK_INSPIRATION = [
   '500 días con ella',
 ];
 
-const DATE_OPTIONS = [
-  { id: 'all', dayWeek: 'TODAS', dayNum: 'TODAS' },
-  { id: 'today', dayWeek: 'HOY', dayNum: '18 OCT' },
-  { id: 'tomorrow', dayWeek: 'DOM', dayNum: '19 OCT' },
-  { id: 'next', dayWeek: 'LUN', dayNum: '20 OCT' },
-  { id: 'weekend', dayWeek: 'FINDE', dayNum: '24-25' },
-  { id: 'date_night', dayWeek: 'CITA', dayNum: 'PRÓXIMA ♡' },
-];
+/** Writes happen before state changes, outside React updater callbacks. Historical raw values are retained. */
+function useCinemaStorage(key: string, fallback: unknown): [unknown, (value: unknown) => boolean] {
+  const [stored, setStored] = useState(() => ({ key, value: readLocal<unknown>(key, fallback) }));
+  const current = useRef(stored);
+  useEffect(() => {
+    const loaded = { key, value: readLocal<unknown>(key, fallback) };
+    current.current = loaded; setStored(loaded);
+    // A namespace switch must never copy a previous user's cache into another namespace.
+  }, [key]);
+  const save = (value: unknown) => {
+    if (current.current.key !== key) return false;
+    const backupKey = `${key}:preserved-before-v2`;
+    if (readLocal<unknown>(backupKey, null) === null && !writeLocal(backupKey, { savedAt: new Date().toISOString(), raw: current.current.value })) return false;
+    if (!writeLocal(key, value)) return false;
+    current.current = { key, value }; setStored(current.current); return true;
+  };
+  return [stored.key === key ? stored.value : readLocal<unknown>(key, fallback), save];
+}
 
 export default function MoviesPage({ namespace, session }: { namespace: string; session?: GallerySession | null }) {
-  const demo = studioIsDemo(namespace);
-  const isConnected = !!session;
-
-  // Inicialización: mantiene las películas que el usuario ha guardado.
-  // Si no hay ninguna, empieza limpia ([]) para no imponer películas que el usuario no agregó.
-  const getInitialMovies = (): StudioMovie[] => {
-    const existing = readLocal<StudioMovie[] | null>(`${namespace}:movies:v1`, null);
-    if (existing && Array.isArray(existing)) return existing;
-    const demoExisting = readLocal<StudioMovie[] | null>('nh:demo:movies:v1', null);
-    if (demoExisting && Array.isArray(demoExisting)) return demoExisting;
-    return [];
+  const isConnected = !!session && namespace === 'nh:user:' + session.uid;
+  const [notice, setNotice] = useState('');
+  const [operationPending, setOperationPending] = useState(false);
+  // The original keys remain intact. Remote snapshots have separate caches and never replace these drafts.
+  const initialMovies = readLocal<unknown>(`${namespace}:movies:v1`, readLocal<unknown>('nh:demo:movies:v1', []));
+  const initialReservations = readLocal<unknown>(`${namespace}:cinepelis-reservations:v1`, readLocal<unknown>('nh:demo:cinepelis-reservations:v1', {}));
+  const [rawLocalMovies, storeLocalMovies] = useCinemaStorage(`${namespace}:movies:v1`, initialMovies);
+  const [rawLocalReservations, storeLocalReservations] = useCinemaStorage(`${namespace}:cinepelis-reservations:v1`, initialReservations);
+  const [rawSharedMovies, storeSharedMovies] = useCinemaStorage(`${namespace}:movies:shared:v2`, []);
+  const [rawSharedReservations, storeSharedReservations] = useCinemaStorage(`${namespace}:reservations:shared:v2`, {});
+  const localMovies = localCinemaMovies(rawLocalMovies);
+  const localReservations = localCinemaReservations(rawLocalReservations);
+  const sharedMovies = localCinemaMovies(rawSharedMovies);
+  const sharedReservations = localCinemaReservations(rawSharedReservations);
+  const sharedMovieIds = new Set(sharedMovies.map(item => item.id));
+  const allMovies = mergeCinemaMovies(localMovies, sharedMovies);
+  const movies = allMovies.filter(item => !item.archived);
+  const localReservationsForView = Object.fromEntries(Object.entries(localReservations).filter(([id]) => !sharedReservations[readLocal<string>(`${namespace}:reservation-shared:${id}`, '')]));
+  const reservationHistory = mergeCinemaReservations(localReservationsForView, sharedReservations);
+  const reservations = activeCinemaReservations(reservationHistory);
+  const pendingMovies = localMovies.filter(item => !item.archived && !sharedMovieIds.has(item.id));
+  const pendingReservations = Object.values(localReservations).filter(item => item.status !== 'cancelled' && !sharedReservations[item.id ?? item.movieId] && !sharedReservations[readLocal<string>(`${namespace}:reservation-shared:${item.id ?? item.movieId}`, '')]);
+  const dates = cinemaDateOptions();
+  const [dateBase, setDateBase] = useState(dates[0].date);
+  useEffect(() => { const timer = window.setInterval(() => setDateBase(cinemaToday()), 60_000); return () => window.clearInterval(timer); }, []);
+  const dateOptions = cinemaDateOptions(new Date(`${dateBase}T18:00:00Z`));
+  const cacheMovie = (movie: StudioMovie) => storeSharedMovies(mergeCinemaMovies(localCinemaMovies(readLocal<unknown>(`${namespace}:movies:shared:v2`, [])), [movie]));
+  const cacheReservation = (reservation: MovieReservation) => storeSharedReservations({ ...localCinemaReservations(readLocal<unknown>(`${namespace}:reservations:shared:v2`, {})), [reservation.id ?? reservation.movieId]: reservation });
+  const preserveRemoteSource = (kind: 'movies' | 'reservations', originals: Record<string, unknown>) => {
+    const key = `${namespace}:cinema-firestore-original:v2`;
+    const previous = readLocal<Record<string, Record<string, unknown>>>(key, {});
+    return writeLocal(key, { ...previous, [kind]: { ...(previous?.[kind] ?? {}), ...originals } });
   };
-
-  const [movies, setMovies] = useLocalState<StudioMovie[]>(`${namespace}:movies:v1`, getInitialMovies());
-
+  const storageFailure = () => setNotice('No se pudo guardar en este navegador. No se reemplazó tu copia anterior; descarga el respaldo completo antes de continuar.');
+  const failure = (error: unknown) => setNotice(error instanceof Error ? error.message : 'No se confirmó el guardado. Tu copia local se conserva para reintentar.');
   // Identificar el usuario conectado con Google (Ale vs Val)
   const currentUserAuthor: StudioAuthor | null = session
     ? (identifyGooglePlayer(session, namespace) === 'valeria' ? 'Val' : 'Ale')
     : null;
 
-  const canDeleteMovie = (movie: StudioMovie): boolean => {
-    if (!currentUserAuthor) return true; // Modo demo / invitado
-    return movie.author === currentUserAuthor;
-  };
+  const canDeleteMovie = (movie: StudioMovie): boolean => movie.createdBy ? movie.createdBy === session?.uid : movie.author === currentUserAuthor;
 
   // Filtros de la cartelera
   const [filterTab, setFilterTab] = useState<'all' | 'pending' | 'watched'>('pending');
   const [searchFilter, setSearchFilter] = useState('');
-  const [selectedDateTab, setSelectedDateTab] = useState('today');
+  const [selectedDateTab, setSelectedDateTab] = useState(cinemaToday());
 
   // Modales
   const [showAddModal, setShowAddModal] = useState(false);
   const [movieToDelete, setMovieToDelete] = useState<StudioMovie | null>(null);
   const [ticketMovie, setTicketMovie] = useState<StudioMovie | null>(null);
   const [ticketShowtime, setTicketShowtime] = useState<string>('8:30 PM');
+  const [ticketDate, setTicketDate] = useState(cinemaToday());
+  const [ticketDateName, setTicketDateName] = useState('');
+  const [ticketReservationId, setTicketReservationId] = useState<string | null>(null);
 
-  // Reservaciones de funciones de cine para ver juntos
-  const getInitialReservations = (): Record<string, MovieReservation> => {
-    const existing = readLocal<Record<string, MovieReservation> | null>(`${namespace}:cinepelis-reservations:v1`, null);
-    if (existing && Object.keys(existing).length > 0) return existing;
-    const demoExisting = readLocal<Record<string, MovieReservation> | null>('nh:demo:cinepelis-reservations:v1', null);
-    if (demoExisting && Object.keys(demoExisting).length > 0) return demoExisting;
-    return {};
-  };
-
-  const [reservations, setReservations] = useLocalState<Record<string, MovieReservation>>(
-    `${namespace}:cinepelis-reservations:v1`,
-    getInitialReservations()
-  );
-
-  // Sincronización en tiempo real con Cloud Firestore (Firebase)
+  // Cache confirmed records independently. An empty snapshot cannot erase a local or cached record.
   useEffect(() => {
     if (!isConnected) return;
-
-    const migratedMoviesKey = `${namespace}:cinepelis-migrated-to-firestore:v1`;
-    const migratedReservationsKey = `${namespace}:cinepelis-reservations-migrated-to-firestore:v1`;
-
-    const unsubMovies = watchFirestoreMovies(
-      (firestoreMovies) => {
-        if (firestoreMovies.length > 0) {
-          setMovies(firestoreMovies);
-          writeLocal(migratedMoviesKey, true);
-        } else {
-          // Si Firestore está vacío, migrar automáticamente películas locales si no se ha migrado antes
-          const alreadyMigrated = readLocal<boolean>(migratedMoviesKey, false);
-          if (!alreadyMigrated) {
-            writeLocal(migratedMoviesKey, true);
-            const local = getInitialMovies();
-            if (local.length > 0) {
-              batchUploadMoviesToFirestore(local).catch(err => {
-                console.warn('[MoviesSync] Error migrando cartelera local a Firestore:', err);
-              });
-            }
-          } else {
-            // El usuario legítimamente vació la cartelera
-            setMovies([]);
-          }
-        }
-      },
-      (err) => {
-        console.warn('[MoviesSync] Error cargando películas de Firestore:', err);
-      }
-    );
-
-    const unsubReservations = watchFirestoreReservations(
-      (firestoreReservations) => {
-        if (Object.keys(firestoreReservations).length > 0) {
-          setReservations(firestoreReservations);
-          writeLocal(migratedReservationsKey, true);
-        } else {
-          const alreadyMigrated = readLocal<boolean>(migratedReservationsKey, false);
-          if (!alreadyMigrated) {
-            writeLocal(migratedReservationsKey, true);
-            const localRes = getInitialReservations();
-            if (Object.keys(localRes).length > 0) {
-              batchUploadReservationsToFirestore(localRes).catch(err => {
-                console.warn('[MoviesSync] Error migrando reservaciones locales a Firestore:', err);
-              });
-            }
-          } else {
-            setReservations({});
-          }
-        }
-      },
-      (err) => {
-        console.warn('[MoviesSync] Error cargando reservaciones de Firestore:', err);
-      }
-    );
-
-    return () => {
-      unsubMovies();
-      unsubReservations();
-    };
+    let cancelled = false;
+    const unsubMovies = watchFirestoreMovies(namespace, (incoming, originals) => {
+      if (cancelled) return;
+      const previous = localCinemaMovies(readLocal<unknown>(`${namespace}:movies:shared:v2`, []));
+      if (!preserveRemoteSource('movies', originals) || !storeSharedMovies(mergeCinemaMovies(previous, incoming))) storageFailure();
+    }, () => setNotice('No se pudo sincronizar la cartelera. Las copias del navegador se conservan; vuelve a intentar con conexión.'));
+    const unsubReservations = watchFirestoreReservations(namespace, (incoming, originals) => {
+      if (cancelled) return;
+      const previous = localCinemaReservations(readLocal<unknown>(`${namespace}:reservations:shared:v2`, {}));
+      if (!preserveRemoteSource('reservations', originals) || !storeSharedReservations(mergeCinemaReservations(previous, incoming))) storageFailure();
+    }, () => setNotice('No se pudieron sincronizar las reservas. Las copias del navegador se conservan.'));
+    return () => { cancelled = true; unsubMovies(); unsubReservations(); };
   }, [isConnected, namespace]);
 
+  const importBackups = () => {
+    const backups: unknown[] = [];
+    try { for (let index = 0; index < localStorage.length; index++) { const key = localStorage.key(index); if (key?.startsWith(`${namespace}:cinema-import:`)) backups.push({ key, value: readLocal<unknown>(key, null) }); } } catch { /* Existing files and records remain in storage if access is unavailable. */ }
+    return backups;
+  };
+  const fullBackup = () => ({ schemaVersion: 2, exportedAt: new Date().toISOString(), movies: allMovies, reservations: reservationHistory,
+    sources: { localMovies: rawLocalMovies, localReservations: rawLocalReservations, sharedMovies: rawSharedMovies, sharedReservations: rawSharedReservations, firestoreOriginal: readLocal(`${namespace}:cinema-firestore-original:v2`, null) },
+    preserved: { movies: readLocal(`${namespace}:movies:v1:preserved-before-v2`, null), reservations: readLocal(`${namespace}:cinepelis-reservations:v1:preserved-before-v2`, null) }, imports: importBackups() });
+  const exportCinema = () => downloadJson('respaldo-completo-cinepelis-ale-val.json', fullBackup());
   const importFileRef = useRef<HTMLInputElement>(null);
-  const handleImportCartelera = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const handleImportCartelera = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (operationPending) return;
+    const file = event.target.files?.[0]; event.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
+    if (file.size > 2 * 1024 * 1024) { setNotice('El respaldo supera 2 MB. Elige un JSON más pequeño; tu cartelera no cambió.'); return; }
+    if (!Array.isArray(rawLocalMovies) || !rawLocalReservations || typeof rawLocalReservations !== 'object' || Array.isArray(rawLocalReservations)) { setNotice('Hay datos locales con otro formato. Descarga el respaldo completo antes de modificarlos.'); return; }
+    try {
+      const source = await file.text(); const parsed = JSON.parse(source);
+      const imported = parseCinemaImport(parsed, allMovies, reservationHistory);
+      // Retain the exact imported file, including unsupported entries, before merging anything.
+      if (!writeLocal(`${namespace}:cinema-import:${crypto.randomUUID()}`, { fileName: file.name, importedAt: new Date().toISOString(), source, before: { ...fullBackup(), imports: undefined } })) { storageFailure(); return; }
+      const moviesSaved = storeLocalMovies([...imported.movies, ...rawLocalMovies]);
+      const reservationsSaved = storeLocalReservations({ ...rawLocalReservations, ...imported.reservations });
+      setNotice(`Importación local: ${imported.movies.length} películas y ${Object.keys(imported.reservations).length} reservas añadidas; ${imported.rejected} registros no compatibles conservados en el respaldo de origen. ${moviesSaved && reservationsSaved ? 'No se subió nada automáticamente.' : 'El navegador no pudo completar la mezcla; el archivo y el estado anterior quedaron respaldados.'}`);
+    } catch (error) { failure(error); }
+  };
+
+  const handleSharePending = async () => {
+    if (!isConnected || operationPending) return;
+    setOperationPending(true); let movieCount = 0; let reservationCount = 0; let errors = 0;
+    // Sharing is explicit. Each record is create-only and confirmed before it joins the shared cache.
+    let confirmedMovies = sharedMovies; let confirmedReservations = sharedReservations;
+    for (const movie of pendingMovies) {
+      try { const confirmed = await saveMovieToFirestore(namespace, movie); confirmedMovies = mergeCinemaMovies(confirmedMovies, [confirmed]); storeSharedMovies(confirmedMovies); movieCount++; }
+      catch { errors++; }
+    }
+    for (const reservation of pendingReservations) {
       try {
-        const parsed = JSON.parse(event.target?.result as string);
-        const imported = Array.isArray(parsed) ? parsed : (parsed.movies || parsed.cartelera || []);
-        if (Array.isArray(imported) && imported.length > 0) {
-          const newOnes: StudioMovie[] = [];
-          setMovies(prev => {
-            const existingIds = new Set(prev.map(m => m.id));
-            const filtered = imported.filter((m: StudioMovie) => m && m.title && !existingIds.has(m.id));
-            newOnes.push(...filtered);
-            return [...filtered, ...prev];
-          });
-          if (isConnected && newOnes.length > 0) {
-            batchUploadMoviesToFirestore(newOnes).catch(err => {
-              console.warn('[MoviesSync] Error guardando cartelera importada en Firestore:', err);
-            });
-          }
-          alert(`¡Cartelera importada con éxito! Se añadieron ${imported.length} películas.`);
-        } else {
-          alert('El archivo no contiene un formato de películas válido.');
-        }
-      } catch {
-        alert('No se pudo leer el archivo de cartelera.');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
+        if (!reservation.showDate) throw new Error('Falta fecha exacta.');
+        const originalId = reservation.id ?? reservation.movieId;
+        // A stable mapping makes retry safe without removing the historical local ID.
+        const mappingKey = `${namespace}:reservation-share-id:${originalId}`;
+        let id = readLocal<string | null>(mappingKey, null);
+        if (!id) { id = crypto.randomUUID(); if (!writeLocal(mappingKey, id)) throw new Error('No se guardó la identidad del reintento.'); }
+        const confirmed = await saveReservationToFirestore(namespace, { ...reservation, id });
+        confirmedReservations = { ...confirmedReservations, [confirmed.id!]: confirmed }; storeSharedReservations(confirmedReservations);
+        if (!writeLocal(`${namespace}:reservation-shared:${originalId}`, confirmed.id)) throw new Error('No se guardó la confirmación local.');
+        reservationCount++;
+      } catch { errors++; }
+    }
+    if (!errors) writeLocal(`${namespace}:cinepelis-explicit-share-confirmed:v2`, new Date().toISOString());
+    setNotice(`Firebase confirmó ${movieCount} películas y ${reservationCount} reservas. ${errors ? `${errors} pendientes conservados: revisa conexión y completa la fecha exacta de las reservas antiguas.` : 'Tus copias locales e historial se conservaron.'}`);
+    setOperationPending(false);
   };
 
   // Película seleccionada al azar (para no estar de indecisos)
@@ -921,8 +918,9 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
     setShowAddModal(true);
   };
 
-  const handleCreateMovie = (e: FormEvent) => {
+  const handleCreateMovie = async (e: FormEvent) => {
     e.preventDefault();
+    if (operationPending) return;
     const cleanTitle = inputTitle.trim() || formSearchQuery.trim();
     if (!cleanTitle) {
       setFormError('Por favor escribe el título de la película.');
@@ -930,7 +928,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
     }
 
     const newMovie: StudioMovie = {
-      id: `movie-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: crypto.randomUUID(),
       title: cleanTitle,
       year: inputYear.trim() || undefined,
       poster: inputPoster.trim() || undefined,
@@ -938,54 +936,49 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
       note: inputNote.trim(),
       author: inputAuthor,
       watched: inputWatched,
-      watchedDate: inputWatched ? new Date().toISOString().slice(0, 10) : undefined,
+      watchedDate: inputWatched ? cinemaToday() : undefined,
       createdAt: new Date().toISOString(),
       duration: inputDuration.trim() || '120 min',
       classification: inputClassification || 'B',
       format: inputFormat || '2D VIP',
     };
 
-    setMovies(prev => [newMovie, ...prev]);
+    try { movieCreateFields(newMovie); } catch (error) { setFormError(error instanceof Error ? error.message : 'Revisa los campos.'); return; }
+    if (!Array.isArray(rawLocalMovies) || !storeLocalMovies([newMovie, ...rawLocalMovies])) { storageFailure(); return; }
+    setOperationPending(true);
     if (isConnected) {
-      saveMovieToFirestore(newMovie).catch(err => {
-        console.warn('[MoviesSync] Error guardando película en Firestore:', err);
-      });
-    }
-    setShowAddModal(false);
-    resetForm();
+      try { const confirmed = await saveMovieToFirestore(namespace, newMovie); cacheMovie(confirmed); setNotice('Película guardada y confirmada en Firebase.'); }
+      catch (error) { failure(error); }
+    } else setNotice('Película conservada sólo en este navegador.');
+    setOperationPending(false); setShowAddModal(false); resetForm();
   };
 
-  // Toggle estado de vista/pendiente
-  const handleToggleWatched = (id: string) => {
-    let updatedToSync: StudioMovie | null = null;
-    setMovies(prev =>
-      prev.map(movie => {
-        if (movie.id !== id) return movie;
-        const nextWatched = !movie.watched;
-        const updated = {
-          ...movie,
-          watched: nextWatched,
-          watchedDate: nextWatched ? new Date().toISOString().slice(0, 10) : undefined,
-        };
-        updatedToSync = updated;
-        // Si el boleto está abierto para esta película, sincronizarlo en tiempo real
-        if (ticketMovie?.id === id) {
-          setTicketMovie(updated);
-        }
-        return updated;
-      })
-    );
-    if (isConnected && updatedToSync) {
-      saveMovieToFirestore(updatedToSync).catch(err => {
-        console.warn('[MoviesSync] Error actualizando película en Firestore:', err);
-      });
-    }
+  const handleToggleWatched = async (id: string) => {
+    if (operationPending) return;
+    const movie = allMovies.find(item => item.id === id); if (!movie) return;
+    const watched = !movie.watched;
+    setOperationPending(true);
+    try {
+      let confirmed: StudioMovie;
+      if (sharedMovieIds.has(id)) { confirmed = await setMovieWatchedInFirestore(namespace, id, watched); cacheMovie(confirmed); }
+      else {
+        confirmed = { ...movie, watched, ...(watched ? { watchedDate: cinemaToday() } : {}) };
+        if (!Array.isArray(rawLocalMovies) || !storeLocalMovies(rawLocalMovies.map(item => item && typeof item === 'object' && item.id === id ? { ...item, watched, ...(watched ? { watchedDate: cinemaToday() } : {}) } : item))) throw new Error('No se guardó el cambio local; tu copia anterior se conserva.');
+      }
+      if (ticketMovie?.id === id) setTicketMovie(confirmed);
+      setNotice(sharedMovieIds.has(id) ? 'Estado confirmado en Firebase.' : 'Estado guardado en la copia local.');
+    } catch (error) { failure(error); }
+    finally { setOperationPending(false); }
   };
 
   // Abrir boleto de cine VIP
-  const handleOpenTicket = (movie: StudioMovie, showtime: string = '8:30 PM') => {
-    setTicketMovie(movie);
-    setTicketShowtime(showtime);
+  const handleOpenTicket = (movie: StudioMovie, showtime = '8:30 PM', savedReservation?: MovieReservation) => {
+    const reservation = savedReservation ?? reservations[movie.id];
+    setTicketMovie(movie); setTicketReservationId(reservation?.id ?? null);
+    setTicketShowtime(reservation?.showtime ?? showtime);
+    setTicketDate(reservation?.showDate ?? activeDateOption.date);
+    setTicketDateName(reservation?.dateName ?? activeDateName);
+    setTicketActionNotice('');
   };
 
   // Escoger película aleatoria para no estar de indecisos
@@ -1003,38 +996,39 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
   };
 
   // Reservar o cancelar función de cine para ver juntos
-  const handleReserveShowtime = (movie: StudioMovie, showtime: string, dateName?: string) => {
-    const resDate = dateName || activeDateName;
-    const newReservation: MovieReservation = {
-      movieId: movie.id,
-      movieTitle: movie.title,
-      poster: movie.poster,
-      dateName: resDate,
-      showtime,
-      reservedAt: new Date().toISOString(),
-    };
-    setReservations(prev => ({
-      ...prev,
-      [movie.id]: newReservation,
-    }));
-    if (isConnected) {
-      saveReservationToFirestore(newReservation).catch(err => {
-        console.warn('[MoviesSync] Error guardando reservación en Firestore:', err);
-      });
-    }
+  const handleReserveShowtime = async (movie: StudioMovie, showtime: string) => {
+    if (operationPending) return;
+    const option = dateOptions.find(item => item.date === ticketDate);
+    const reservation: MovieReservation = { id: crypto.randomUUID(), movieId: movie.id, movieTitle: movie.title, poster: movie.poster,
+      dateName: option?.label ?? ticketDate, showDate: ticketDate, showtime: showtime.trim(), reservedAt: new Date().toISOString(), status: 'active' };
+    if (!reservation.showtime || reservation.showtime.length > 40) { setNotice('Escribe un horario de hasta 40 caracteres.'); return; }
+    if (!rawLocalReservations || typeof rawLocalReservations !== 'object' || Array.isArray(rawLocalReservations) || !storeLocalReservations({ ...rawLocalReservations, [reservation.id!]: reservation })) { storageFailure(); return; }
+    setOperationPending(true);
+    try {
+      if (isConnected) {
+        const confirmed = await saveReservationToFirestore(namespace, reservation); cacheReservation(confirmed);
+        setNotice('Reserva confirmada en Firebase. Las reservas anteriores conservan su historial.');
+      } else setNotice('Reserva conservada sólo en este navegador.');
+      setTicketReservationId(reservation.id!); setTicketDateName(reservation.dateName);
+    } catch (error) { failure(error); }
+    finally { setOperationPending(false); }
   };
 
-  const handleCancelReservation = (movieId: string) => {
-    setReservations(prev => {
-      const next = { ...prev };
-      delete next[movieId];
-      return next;
-    });
-    if (isConnected) {
-      deleteReservationFromFirestore(movieId).catch(err => {
-        console.warn('[MoviesSync] Error cancelando reservación en Firestore:', err);
-      });
-    }
+  const handleCancelReservation = async (movieId: string, reservationId?: string) => {
+    if (operationPending) return;
+    const reservation = reservationId ? reservationHistory[reservationId] : reservations[movieId];
+    if (!reservation) return;
+    const id = reservation.id ?? reservation.movieId;
+    setOperationPending(true);
+    try {
+      if (sharedReservations[id]) { const confirmed = await cancelReservationInFirestore(namespace, id); cacheReservation(confirmed); setNotice('Cancelación confirmada. La reserva continúa en el historial.'); }
+      else {
+        if (!rawLocalReservations || typeof rawLocalReservations !== 'object' || Array.isArray(rawLocalReservations) || !storeLocalReservations({ ...rawLocalReservations, [id]: { ...reservation, status: 'cancelled', cancelledAt: new Date().toISOString(), cancelledBy: session?.uid ?? 'local' } })) throw new Error('No se guardó la cancelación local. La reserva anterior se conserva.');
+        setNotice('Reserva cancelada en este navegador; su historial se conservó.');
+      }
+      if (ticketReservationId === id) setTicketReservationId(null);
+    } catch (error) { failure(error); }
+    finally { setOperationPending(false); }
   };
 
   const [customTimeText, setCustomTimeText] = useState('');
@@ -1046,7 +1040,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
     setIsGeneratingTicketImage(true);
     setTicketActionNotice('');
     try {
-      const blob = await generateTicketImage(ticketMovie, ticketShowtime, activeDateName);
+      const blob = await generateTicketImage(ticketMovie, ticketExportShowtime, ticketExportDateName);
       if (!blob) throw new Error('No se pudo generar la imagen');
 
       const fileName = `boleto-cinepelis-${ticketMovie.title.slice(0, 15).toLowerCase().replace(/[^a-z0-9]/g, '-')}.png`;
@@ -1056,13 +1050,13 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
         await navigator.share({
           files: [file],
           title: `Boleto VIP: ${ticketMovie.title}`,
-          text: `¡Tenemos cita de cine! Boleto VIP para ver ${ticketMovie.title} a las ${ticketShowtime} en Cinepelis ♡`,
+          text: `¡Tenemos cita de cine! Boleto VIP para ver ${ticketMovie.title} el ${ticketExportDateName} a las ${ticketExportShowtime} en Cinepelis ♡`,
         });
         setTicketActionNotice('¡Boleto compartido con éxito! ♡');
       } else {
         await downloadImageFile(blob, fileName);
         try {
-          await navigator.clipboard.writeText(`¡Tenemos cita de cine! Boleto VIP para ver ${ticketMovie.title} a las ${ticketShowtime} en Cinepelis ♡`);
+          await navigator.clipboard.writeText(`¡Tenemos cita de cine! Boleto VIP para ver ${ticketMovie.title} el ${ticketExportDateName} a las ${ticketExportShowtime} en Cinepelis ♡`);
         } catch {}
         setTicketActionNotice('Boleto descargado como imagen y mensaje copiado al portapapeles para enviar ♡');
       }
@@ -1079,7 +1073,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
     setIsGeneratingTicketImage(true);
     setTicketActionNotice('');
     try {
-      const blob = await generateTicketImage(ticketMovie, ticketShowtime, activeDateName);
+      const blob = await generateTicketImage(ticketMovie, ticketExportShowtime, ticketExportDateName);
       if (!blob) throw new Error('No se pudo generar la imagen');
       const fileName = `boleto-cinepelis-${ticketMovie.title.slice(0, 15).toLowerCase().replace(/[^a-z0-9]/g, '-')}.png`;
       await downloadImageFile(blob, fileName);
@@ -1091,20 +1085,27 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
     }
   };
 
-  // Confirmar eliminación
-  const handleDeleteConfirm = () => {
-    if (!movieToDelete) return;
-    const idToDelete = movieToDelete.id;
-    setMovies(prev => prev.filter(m => m.id !== idToDelete));
-    if (ticketMovie?.id === idToDelete) {
-      setTicketMovie(null);
-    }
-    setMovieToDelete(null);
-    if (isConnected) {
-      deleteMovieFromFirestore(idToDelete).catch(err => {
-        console.warn('[MoviesSync] Error eliminando película de Firestore:', err);
-      });
-    }
+  // Archive only: the original document, metadata, and reservations are never deleted.
+  const handleDeleteConfirm = async () => {
+    if (!movieToDelete || operationPending) return;
+    const movie = movieToDelete; setOperationPending(true);
+    try {
+      if (sharedMovieIds.has(movie.id)) { const confirmed = await archiveMovieInFirestore(namespace, movie.id); cacheMovie(confirmed); }
+      else if (!Array.isArray(rawLocalMovies) || !storeLocalMovies(rawLocalMovies.map(item => item && typeof item === 'object' && item.id === movie.id ? { ...item, archived: true, archivedAt: new Date().toISOString(), archivedBy: session?.uid ?? 'local' } : item))) throw new Error('No se guardó el archivo local. La película se conserva en la cartelera.');
+      if (ticketMovie?.id === movie.id) setTicketMovie(null);
+      setMovieToDelete(null); setNotice('Película archivada; su contenido y reservas siguen conservados en el historial y el respaldo.');
+    } catch (error) { failure(error); }
+    finally { setOperationPending(false); }
+  };
+
+  const restoreArchivedMovie = async (movie: StudioMovie) => {
+    if (operationPending || !canDeleteMovie(movie)) return;
+    setOperationPending(true);
+    try {
+      if (sharedMovieIds.has(movie.id)) { const confirmed = await archiveMovieInFirestore(namespace, movie.id, false); cacheMovie(confirmed); }
+      else if (!Array.isArray(rawLocalMovies) || !storeLocalMovies(rawLocalMovies.map(item => item && typeof item === 'object' && item.id === movie.id ? { ...item, archived: false } : item))) throw new Error('No se confirmó la restauración local; el historial se conserva.');
+      setNotice('Película restaurada en la cartelera. Se conservaron sus reservas.');
+    } catch (error) { failure(error); } finally { setOperationPending(false); }
   };
 
   // Películas filtradas
@@ -1124,8 +1125,15 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
     return true;
   });
 
-  const activeDateOption = DATE_OPTIONS.find(d => d.id === selectedDateTab) ?? DATE_OPTIONS[1];
-  const activeDateName = activeDateOption.id === 'all' ? 'Función Estelar' : `${activeDateOption.dayWeek} ${activeDateOption.dayNum}`;
+  const activeDateOption = dateOptions.find(item => item.id === selectedDateTab) ?? dateOptions[0];
+  const activeDateName = activeDateOption.label;
+  const selectedReservation = ticketReservationId ? reservationHistory[ticketReservationId] : null;
+  // Export is derived only from the saved reservation when displaying a booked ticket.
+  const ticketExportShowtime = selectedReservation?.showtime ?? ticketShowtime;
+  const ticketExportDateName = selectedReservation ? `${selectedReservation.dateName}${selectedReservation.showDate ? ` (${selectedReservation.showDate})` : ''}` : ticketDateName;
+  const archivedMovies = allMovies.filter(item => item.archived);
+  const cancelledReservations = Object.values(reservationHistory).filter(item => item.status === 'cancelled');
+  const activeReservationList = Object.values(reservationHistory).filter(item => item.status !== 'cancelled');
 
   return (
     <div className="cartelera-page cinepolis-theme">
@@ -1173,11 +1181,11 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
 
           <button
             className="cinepolis-cta-export"
-            onClick={() => downloadJson('cartelera-cinepelis-ale-val.json', movies)}
-            title="Descargar lista de películas en JSON"
+            onClick={exportCinema}
+            title="Descargar películas, reservas, historial y copias originales en JSON"
           >
             <Download size={15} />
-            <span>Descargar cartelera</span>
+            <span>Respaldo completo</span>
           </button>
 
           <input
@@ -1190,6 +1198,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
           <button
             type="button"
             className="cinepolis-cta-export"
+            disabled={operationPending}
             onClick={() => importFileRef.current?.click()}
             title="Importar lista de películas en JSON"
           >
@@ -1199,8 +1208,37 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
         </div>
       </header>
 
+      {notice && <p className="studio-status" role="status">{notice}</p>}
+      {operationPending && <p className="studio-status" role="status">Confirmando el guardado…</p>}
+      {(pendingMovies.length > 0 || pendingReservations.length > 0) && (
+        <section className="studio-status" aria-label="Pendientes locales de cine">
+          <p>{pendingMovies.length} películas y {pendingReservations.length} reservas siguen sólo en este navegador. No se comparten automáticamente.</p>
+          {isConnected && <button type="button" className="button button-secondary" disabled={operationPending} onClick={handleSharePending}>Compartir pendientes con Firebase</button>}
+          {pendingReservations.filter(item => !item.showDate).map(item => (
+            <label key={item.id ?? item.movieId} style={{ display: 'block', marginTop: '.75rem' }}>
+              Fecha exacta de «{item.movieTitle}» (antes: {item.dateName}):{' '}
+              <input type="date" aria-label={`Fecha exacta para ${item.movieTitle}`} onChange={event => {
+                const showDate = event.target.value; if (!showDate || !rawLocalReservations || typeof rawLocalReservations !== 'object' || Array.isArray(rawLocalReservations)) return;
+                const id = item.id ?? item.movieId;
+                const day = new Date(`${showDate}T12:00:00Z`);
+                const dateName = new Intl.DateTimeFormat('es-MX', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(day);
+                if (!storeLocalReservations({ ...rawLocalReservations, [id]: { ...item, showDate, dateName, originalDateName: item.originalDateName ?? item.dateName } })) storageFailure();
+              }} />
+            </label>
+          ))}
+        </section>
+      )}
+      {(archivedMovies.length > 0 || cancelledReservations.length > 0) && (
+        <details className="studio-status">
+          <summary>Historial conservado: {archivedMovies.length} películas archivadas y {cancelledReservations.length} reservas canceladas</summary>
+          {archivedMovies.map(movie => <p key={movie.id}>Archivada: {movie.title} · {movie.author} {canDeleteMovie(movie) && <button type="button" className="text-link" disabled={operationPending} onClick={() => void restoreArchivedMovie(movie)}>Restaurar</button>}</p>)}
+          {cancelledReservations.map(item => <p key={item.id ?? item.movieId}>Reserva cancelada: {item.movieTitle} · {item.dateName} · {item.showtime}</p>)}
+          <button type="button" className="button button-secondary" onClick={exportCinema}>Descargar todo el historial</button>
+        </details>
+      )}
+
       {/* Banner de Citas de Cine Reservadas Juntos */}
-      {Object.values(reservations).length > 0 && (
+      {activeReservationList.length > 0 && (
         <section className="cinepelis-reservations-banner" aria-label="Citas de cine reservadas">
           <div className="reservations-banner-header">
             <div className="reservations-banner-title">
@@ -1208,15 +1246,15 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
               <h3>Nuestras Citas de Cine Reservadas ♡</h3>
             </div>
             <span className="reservations-banner-badge">
-              {Object.keys(reservations).length} {Object.keys(reservations).length === 1 ? 'función reservada' : 'funciones reservadas'}
+              {activeReservationList.length} {activeReservationList.length === 1 ? 'función guardada' : 'funciones guardadas'}
             </span>
           </div>
 
           <div className="reservations-grid">
-            {Object.values(reservations).map(res => {
+            {activeReservationList.map(res => {
               const movieObj = movies.find(m => m.id === res.movieId);
               return (
-                <div key={res.movieId} className="reservation-card">
+                <div key={res.id ?? res.movieId} className="reservation-card">
                   {res.poster ? (
                     <img src={res.poster} alt={res.movieTitle} className="reservation-poster" />
                   ) : (
@@ -1227,6 +1265,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
 
                   <div className="reservation-info">
                     <h4 className="reservation-movie-title">{res.movieTitle}</h4>
+                    <small>{sharedReservations[res.id ?? res.movieId] ? 'Compartida en Firebase' : 'Sólo en este navegador'}</small>
                     <div className="reservation-meta">
                       <span className="reservation-pill date-pill">
                         <Calendar size={12} />
@@ -1246,7 +1285,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                       className="reservation-view-ticket-btn"
                       onClick={() => {
                         if (movieObj) {
-                          handleOpenTicket(movieObj, res.showtime);
+                          handleOpenTicket(movieObj, res.showtime, res);
                         }
                       }}
                       title="Ver boleto VIP de esta cita"
@@ -1258,7 +1297,8 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                     <button
                       type="button"
                       className="reservation-cancel-btn"
-                      onClick={() => handleCancelReservation(res.movieId)}
+                      disabled={operationPending}
+                      onClick={() => handleCancelReservation(res.movieId, res.id)}
                       title="Cancelar reservación"
                       aria-label={`Cancelar cita para ${res.movieTitle}`}
                     >
@@ -1279,7 +1319,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
           <span>Fechas de Función:</span>
         </div>
         <div className="date-ribbon-items">
-          {DATE_OPTIONS.map(opt => (
+          {dateOptions.map(opt => (
             <button
               key={opt.id}
               type="button"
@@ -1612,8 +1652,8 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                         type="button"
                         className="cinepolis-btn-delete"
                         onClick={() => setMovieToDelete(movie)}
-                        title="Eliminar de la cartelera"
-                        aria-label={`Eliminar ${movie.title}`}
+                        title="Archivar de la cartelera"
+                        aria-label={`Archivar ${movie.title}`}
                       >
                         <Trash2 size={15} />
                       </button>
@@ -1668,7 +1708,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                   <div className="ticket-field">
                     <span className="ticket-label">FUNCIÓN ACTUAL</span>
                     <strong className="ticket-value highlight-gold">
-                      {ticketShowtime} · {activeDateName}
+                      {ticketExportShowtime} · {ticketExportDateName}
                     </strong>
                   </div>
                   <div className="ticket-field">
@@ -1687,6 +1727,11 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
 
                 {/* Selector de horario dentro del boleto */}
                 <div className="ticket-showtime-picker-wrap">
+                  <label className="ticket-label" htmlFor="cinema-booking-date">FECHA EXACTA DE LA NUEVA RESERVA:</label>
+                  <input id="cinema-booking-date" type="date" value={ticketDate} onChange={event => {
+                    const date = event.target.value; setTicketDate(date);
+                    if (date) setTicketDateName(new Intl.DateTimeFormat('es-MX', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${date}T12:00:00Z`)));
+                  }} />
                   <span className="ticket-label">CAMBIAR / ELEGIR HORARIO DE FUNCIÓN:</span>
                   <div className="ticket-showtime-buttons">
                     {SHOWTIME_PRESETS.map(time => (
@@ -1736,31 +1781,33 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
 
                 {/* Caja de Reservación de Función para verla juntos */}
                 <div className="cinepolis-ticket-booking-box">
-                  {reservations[ticketMovie.id] ? (
+                  {selectedReservation && selectedReservation.status !== 'cancelled' ? (
                     <div className="booking-status confirmed">
                       <div className="booking-status-header">
                         <Check size={16} />
-                        <strong>¡Cita de cine reservada con éxito!</strong>
+                        <strong>{sharedReservations[selectedReservation.id ?? selectedReservation.movieId] ? 'Reserva confirmada en Firebase' : 'Reserva guardada en este navegador'}</strong>
                       </div>
                       <p>
                         Reservaron para ver <strong>{ticketMovie.title}</strong> el{' '}
-                        <strong>{reservations[ticketMovie.id].dateName}</strong> a las{' '}
-                        <span className="highlight-gold">{reservations[ticketMovie.id].showtime}</span> en Sala 1 VIP.
+                        <strong>{selectedReservation.dateName}</strong> a las{' '}
+                        <span className="highlight-gold">{selectedReservation.showtime}</span> en Sala 1 VIP.
                       </p>
                       <div className="booking-status-actions">
-                        {reservations[ticketMovie.id].showtime !== ticketShowtime && (
+                        {(selectedReservation.showtime !== ticketShowtime || selectedReservation.showDate !== ticketDate) && (
                           <button
                             type="button"
                             className="booking-btn-change"
-                            onClick={() => handleReserveShowtime(ticketMovie, ticketShowtime, activeDateName)}
+                            disabled={operationPending}
+                            onClick={() => handleReserveShowtime(ticketMovie, ticketShowtime)}
                           >
-                            Actualizar horario a las {ticketShowtime}
+                            Guardar otra reserva: {ticketDateName}, {ticketShowtime}
                           </button>
                         )}
                         <button
                           type="button"
                           className="booking-btn-cancel"
-                          onClick={() => handleCancelReservation(ticketMovie.id)}
+                          disabled={operationPending}
+                          onClick={() => handleCancelReservation(ticketMovie.id, selectedReservation.id)}
                         >
                           Cancelar reservación
                         </button>
@@ -1795,7 +1842,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                           className="ticket-share-btn secondary"
                           onClick={async () => {
                             if (!ticketMovie) return;
-                            const blob = await generateTicketImage(ticketMovie, ticketShowtime, activeDateName);
+                            const blob = await generateTicketImage(ticketMovie, ticketExportShowtime, ticketExportDateName);
                             if (!blob) return;
                             const url = URL.createObjectURL(blob);
                             window.open(url, '_blank');
@@ -1822,10 +1869,11 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                       <button
                         type="button"
                         className="booking-btn-reserve"
-                        onClick={() => handleReserveShowtime(ticketMovie, ticketShowtime, activeDateName)}
+                        disabled={operationPending || !ticketDate}
+                        onClick={() => handleReserveShowtime(ticketMovie, ticketShowtime)}
                       >
                         <Ticket size={16} />
-                        <span>Reservar boleto juntos a las {ticketShowtime} ({activeDateName}) ♡</span>
+                        <span>Reservar boleto juntos a las {ticketShowtime} ({ticketDateName}) ♡</span>
                       </button>
                     </div>
                   )}
@@ -2119,6 +2167,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                   </label>
                   <input
                     id="movie-title-input"
+                    maxLength={200}
                     type="text"
                     value={inputTitle}
                     onChange={e => setInputTitle(e.target.value)}
@@ -2135,6 +2184,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                     </label>
                     <input
                       id="movie-year-input"
+                      maxLength={10}
                       type="text"
                       value={inputYear}
                       onChange={e => setInputYear(e.target.value)}
@@ -2203,6 +2253,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                   </label>
                   <input
                     id="movie-stars-input"
+                    maxLength={1000}
                     type="text"
                     value={inputStars}
                     onChange={e => setInputStars(e.target.value)}
@@ -2217,6 +2268,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
                   </label>
                   <textarea
                     id="movie-note-input"
+                    maxLength={10000}
                     value={inputNote}
                     onChange={e => setInputNote(e.target.value)}
                     placeholder="Ej: Para una noche de palomitas y mantita, me dijeron que está hermosa..."
@@ -2279,7 +2331,7 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
               <button type="button" className="button button-secondary" onClick={() => setShowAddModal(false)}>
                 Cancelar
               </button>
-              <button type="submit" className="cinepolis-cta-add">
+              <button type="submit" className="cinepolis-cta-add" disabled={operationPending}>
                 <Heart size={16} fill="currentColor" />
                 <span>Programar en cartelera</span>
               </button>
@@ -2288,24 +2340,24 @@ export default function MoviesPage({ namespace, session }: { namespace: string; 
         </StudioDialog>
       )}
 
-      {/* Modal de confirmación para eliminar */}
+      {/* Archivo conservando contenido e historial */}
       {movieToDelete && (
         <StudioDialog
-          title="Eliminar de la cartelera"
-          subtitle="¿Seguro que deseas quitar esta película?"
+          title="Archivar de la cartelera"
+          subtitle="Se conservarán la película y su historial."
           onClose={() => setMovieToDelete(null)}
         >
           <div className="cartelera-delete-modal-content">
             <p>
-              ¿Quieres quitar <strong>«{movieToDelete.title}»</strong> de nuestra cartelera de cine?
+              ¿Quieres archivar <strong>«{movieToDelete.title}»</strong> de nuestra cartelera de cine?
             </p>
             <div className="modal-actions-row">
               <button type="button" className="button button-secondary" onClick={() => setMovieToDelete(null)}>
                 Cancelar
               </button>
-              <button type="button" className="button button-danger" onClick={handleDeleteConfirm}>
+              <button type="button" className="button button-danger" disabled={operationPending} onClick={handleDeleteConfirm}>
                 <Trash2 size={16} />
-                <span>Sí, eliminar película</span>
+                <span>Sí, archivar película</span>
               </button>
             </div>
           </div>

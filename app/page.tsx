@@ -6,9 +6,7 @@ export default function OurUniverse() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     setReady(true);
-    const isProd = typeof import.meta !== 'undefined' && import.meta?.env?.PROD !== undefined
-      ? Boolean(import.meta.env.PROD)
-      : (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production');
+    const isProd = process.env.NODE_ENV === 'production';
     if (isProd && 'serviceWorker' in navigator) {
       const register = () => { void navigator.serviceWorker.register('/sw.js').catch(() => undefined); };
       if (document.readyState === 'complete') register();

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { createPortal } from 'react-dom';
 import { ArrowUpRight, Clock, Disc3, Download, Flower2, Heart, Lock, Mail, Music2, Pause, Play, Pencil, PenLine, Search, ShieldCheck, Sparkles, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { downloadJson, useLocalState } from '../lib/storage';
-import { prependStudioLocal, type StudioAuthor, type StudioLetter } from '../data/studio-sync';
+import { connectedStudioUid, prependStudioLocal, reviseStudioLocal, spotifyLink, studioMusicLink, type StudioAuthor, type StudioLetter } from '../data/studio-sync';
 import { useStudioSync } from './useStudioSync';
 import { identifyGooglePlayer } from '../lib/game-progression';
 import type { GallerySession } from '../data/types';
@@ -480,7 +480,7 @@ export function LetterReaderDialog({
                         onDelete();
                       }}
                     >
-                      <Trash2 size={13} /> Eliminar carta
+                      <Trash2 size={13} /> Archivar carta
                     </button>
                   )}
                 </div>
@@ -552,7 +552,7 @@ export function LockedLetterDialog({
           {letter.tag === 'Abre cuando' && letter.occasion ? (
             <>Esta carta tiene una sorpresa reservada para cuando <strong>{letter.occasion}</strong>.</>
           ) : (
-            <>Esta carta está sellada con amor. Su contenido se revelará automáticamente en la fecha indicada:</>
+            <>La apertura de esta carta está programada para la fecha indicada:</>
           )}
           <br />
           <strong style={{ color: 'var(--studio-rose-deep)', display: 'block', marginTop: '6px' }}>
@@ -590,7 +590,7 @@ export function LockedLetterDialog({
               onClick={onDelete}
               style={{ marginTop: '4px' }}
             >
-              <Trash2 size={14} /> Eliminar carta
+              <Trash2 size={14} /> Archivar carta
             </button>
           )}
         </div>
@@ -604,23 +604,29 @@ export function ConfirmDeleteDialog({
   title,
   onClose,
   onConfirm,
+  busy = false,
+  error = '',
 }: {
+  busy?: boolean;
+  error?: string;
   title: string;
   onClose: () => void;
   onConfirm: () => void;
 }) {
   return (
     <StudioDialog
-      title="¿Eliminar esta carta?"
-      subtitle={`«${title}» se borrará de tu buzón. Esta acción no se puede deshacer.`}
+      busy={busy}
+      title="¿Archivar esta carta?"
+      subtitle={`«${title}» quedará en el archivo. El contenido y las versiones anteriores se conservan.`}
       onClose={onClose}
     >
+      {error && <p className="studio-form-error" role="alert">{error}</p>}
       <div className="studio-form-actions" style={{ marginTop: '20px' }}>
-        <button type="button" className="button-secondary" onClick={onClose}>
+        <button type="button" className="button-secondary" disabled={busy} onClick={onClose}>
           Cancelar
         </button>
-        <button type="button" className="button-destructive" onClick={onConfirm}>
-          <Trash2 size={15} /> Eliminar carta
+        <button type="button" className="button-destructive" disabled={busy} onClick={onConfirm}>
+          <Trash2 size={15} /> Archivar carta
         </button>
       </div>
     </StudioDialog>
@@ -643,6 +649,7 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
   const currentUserAuthor: StudioAuthor | null = detectedPlayerId === 'valeria' ? 'Val' : detectedPlayerId === 'ale' ? 'Ale' : null;
 
   const sync = useStudioSync(namespace, 'letters', stored);
+  const musicSync = useStudioSync(namespace, 'songs', musicStored);
   const letters = sync.rows.map(row => row.item) as Letter[];
   const identity = useRef<{ id: string; createdAt: string } | null>(null);
   const [error, setError] = useState('');
@@ -758,7 +765,8 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
     // Si no tiene previewUrl (ej: dedicatoria previa en la sección de música), buscar una en iTunes
     try {
       const results = await searchLetterSongs(`${song.title} ${song.artist}`);
-      const found = results.find(r => r.previewUrl) || results[0];
+      const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const found = results.find(r => r.previewUrl && normalize(r.title) === normalize(song.title) && normalize(r.artist) === normalize(song.artist));
       if (found && found.previewUrl) {
         setFormSong({
           ...song,
@@ -774,20 +782,23 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
   };
 
   // Dedicatorias guardadas en la página de música para ofrecerlas rápidamente
-  const dedicationsFromMusic: LetterSong[] = Array.isArray(musicStored)
-    ? musicStored
-        .filter((s: any) => s && typeof s.title === 'string' && typeof s.artist === 'string')
-        .map((s: any) => ({
-          id: s.id,
-          title: s.title,
-          artist: s.artist,
-          spotifyUrl: typeof s.url === 'string' ? s.url : undefined,
-        }))
-    : [];
+  const dedicationsFromMusic: LetterSong[] = musicSync.rows
+    .filter(row => !(row.item as typeof row.item & { archived?: boolean }).archived)
+    .map(({ item: song }) => ({
+      id: song.id, title: song.title, artist: song.artist,
+      ...(spotifyLink(song.url) ? { spotifyUrl: song.url } : studioMusicLink(song.url) ? { catalogUrl: song.url } : {}),
+      ...(song.artworkUrl ? { artworkUrl: song.artworkUrl } : {}),
+      ...(song.previewUrl ? { previewUrl: song.previewUrl } : {}),
+      ...(song.startSeconds ? { startSeconds: song.startSeconds } : {}),
+    }));
 
   const [opened, setOpened] = useState<Letter | null>(null);
   const [lockedLetter, setLockedLetter] = useState<Letter | null>(null);
   const [letterToDelete, setLetterToDelete] = useState<Letter | null>(null);
+  useEffect(() => {
+    setOpened(current => current ? letters.find(letter => letter.id === current.id) ?? current : current);
+    setLockedLetter(current => current ? letters.find(letter => letter.id === current.id) ?? current : current);
+  }, [sync.rows]);
 
   const [filter, setFilter] = useState<'Todas' | Letter['tag']>('Todas');
   const [status, setStatus] = useState('');
@@ -825,7 +836,7 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
     const unlock = getLetterUnlockAt(letter);
     if (unlock) {
       setEnableSchedule(true);
-      setScheduleDate(new Date(unlock).toISOString().slice(0, 16));
+      setScheduleDate(toLocalDatetimeInput(new Date(unlock)));
     } else {
       setEnableSchedule(false);
       setScheduleDate('');
@@ -838,31 +849,37 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
   };
 
   const getLetterColor = (letter: Letter): LetterThemeId => {
-    return letter.color || metaStore[letter.id]?.color || 'rose';
+    return letter.color || ((letter as Letter & { revisionId?: string }).revisionId ? undefined : metaStore[letter.id]?.color) || 'rose';
   };
 
   const getLetterUnlockAt = (letter: Letter): string | undefined => {
-    return letter.unlockAt || metaStore[letter.id]?.unlockAt;
+    return letter.unlockAt || ((letter as Letter & { revisionId?: string }).revisionId ? undefined : metaStore[letter.id]?.unlockAt);
   };
 
   const getLetterSong = (letter: Letter): LetterSong | undefined => {
-    return letter.song || metaStore[letter.id]?.song;
+    return letter.song || ((letter as Letter & { revisionId?: string }).revisionId ? undefined : metaStore[letter.id]?.song);
   };
 
   const canModifyLetter = (letter: Letter): boolean => {
-    // Si no hay cuenta conectada (modo invitado), se permite probar
+    const creator = (letter as Letter & { createdBy?: string }).createdBy;
+    if (creator) return creator === connectedStudioUid(namespace);
+    // Los borradores locales conservan su autoría visual.
     if (!currentUserAuthor) return true;
     // Con cuenta de Google, solo quien la redactó tiene permiso de editar y borrar
     return letter.author === currentUserAuthor;
   };
 
-  const activeLetters = letters.filter(letter => !deletedIds.includes(letter.id));
+  const [showArchived, setShowArchived] = useState(false);
+  const isArchived = (letter: Letter) => (letter as Letter & { archived?: boolean }).archived === true || deletedIds.includes(letter.id);
+  const activeLetters = letters.filter(letter => showArchived === isArchived(letter));
   const visible = filter === 'Todas' ? activeLetters : activeLetters.filter(letter => letter.tag === filter);
 
   const exportLetters = () =>
     downloadJson('nuestra-historia-cartas.json', {
       ...sync.exportData,
-      letters: activeLetters.map(l => ({
+      hiddenLocalIds: deletedIds,
+      localMetadata: metaStore,
+      letters: letters.map(l => ({
         ...l,
         color: getLetterColor(l),
         unlockAt: getLetterUnlockAt(l),
@@ -870,14 +887,17 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
       })),
     });
 
-  function handleDeleteLetter(letter: Letter) {
-    if (!canModifyLetter(letter)) {
-      setError(`Solo ${letter.author} puede eliminar esta carta.`);
-      return;
+  async function handleDeleteLetter(letter: Letter, archived = true) {
+    if (!canModifyLetter(letter)) { setError('Sólo la cuenta que creó esta carta puede archivarla.'); return; }
+    const row = sync.rows.find(row => row.item.id === letter.id);
+    if (row?.scope === 'shared') {
+      if (!await sync.archive(letter, archived)) return;
+    } else {
+      try { setStored(reviseStudioLocal(stored, row?.localId ?? letter.id, { archived })); }
+      catch (failure) { setError((failure as Error).message); return; }
     }
-    setDeletedIds(prev => [...(Array.isArray(prev) ? prev : []), letter.id]);
-    setStored((prev: unknown) => Array.isArray(prev) ? prev.filter((item: any) => item?.id !== letter.id) : prev);
-    setStatus(`Carta «${letter.title}» eliminada.`);
+    if (!archived) setDeletedIds(previous => previous.filter(id => id !== letter.id && id !== row?.localId));
+    setStatus(`Carta «${letter.title}» ${archived ? 'archivada; conservamos su contenido e historial' : 'restaurada'}.`);
     setLetterToDelete(null);
     if (opened?.id === letter.id) setOpened(null);
     if (lockedLetter?.id === letter.id) setLockedLetter(null);
@@ -893,7 +913,8 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
       return;
     }
 
-    const unlockTimestamp = enableSchedule && scheduleDate ? new Date(scheduleDate).toISOString() : undefined;
+    if (enableSchedule && (!scheduleDate || !Number.isFinite(new Date(scheduleDate).getTime()))) { setError('Elige una fecha y hora válidas para la apertura.'); return; }
+    const unlockTimestamp = enableSchedule ? new Date(scheduleDate).toISOString() : undefined;
 
     if (editingLetter) {
       if (!canModifyLetter(editingLetter)) {
@@ -909,24 +930,20 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
         body,
         tag: formTag,
         occasion: formTag === 'Abre cuando' ? occasion : '',
-        author: formAuthor,
+        author: editingLetter.author,
         color: selectedColor,
         unlockAt: unlockTimestamp,
         song: formSong,
       };
 
-      setMetaStore(prev => ({
-        ...prev,
-        [editingLetter.id]: {
-          color: selectedColor,
-          unlockAt: unlockTimestamp,
-          song: formSong,
-        },
-      }));
-
-      setStored((prev: unknown) =>
-        Array.isArray(prev) ? prev.map((item: any) => item?.id === editingLetter.id ? updatedLetter : item) : prev
-      );
+      const row = sync.rows.find(row => row.item.id === editingLetter.id);
+      if (row?.scope === 'shared') {
+        if (!await sync.update(editingLetter, updatedLetter)) return;
+      } else {
+        try { setStored(reviseStudioLocal(stored, row?.localId ?? editingLetter.id, updatedLetter as unknown as Record<string, unknown>)); }
+        catch (failure) { setError((failure as Error).message); return; }
+      }
+      setMetaStore(previous => ({ ...previous, [editingLetter.id]: { color: selectedColor, unlockAt: unlockTimestamp, song: formSong } }));
 
       setCompose(false);
       setEditingLetter(null);
@@ -1002,6 +1019,7 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
             </button>
           ))}
         </div>
+        <button type="button" className="studio-export" onClick={() => setShowArchived(value => !value)}>{showArchived ? "Ver buzón" : "Ver archivo"}</button>
         <button type="button" className="studio-export" onClick={exportLetters}>
           <Download size={14} /> Exportar
         </button>
@@ -1112,7 +1130,7 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
                         busy={sync.busy}
                         error={sync.error}
                         onShare={async () => {
-                          const ok = await sync.share(letter);
+                          const ok = await sync.share({ ...letter, color: getLetterColor(letter), unlockAt: getLetterUnlockAt(letter), song: getLetterSong(letter) });
                           if (ok) setStatus('Carta compartida. El borrador local se conserva.');
                           return ok;
                         }}
@@ -1134,16 +1152,16 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
                         <button
                           type="button"
                           className="studio-letter-delete-btn"
-                          onClick={() => setLetterToDelete(letter)}
-                          title="Eliminar mi carta"
+                          onClick={() => isArchived(letter) ? void handleDeleteLetter(letter, false) : setLetterToDelete(letter)}
+                          title={isArchived(letter) ? "Restaurar carta" : "Archivar mi carta"}
                         >
-                          <Trash2 size={13} /> Borrar
+                          <Trash2 size={13} /> {isArchived(letter) ? "Restaurar" : "Archivar"}
                         </button>
                       </>
                     ) : (
                       <span
                         className="studio-letter-protected-badge"
-                        title={`Esta carta fue escrita por ${letter.author}. Solo quien la escribió puede editarla o borrarla.`}
+                        title={`Esta carta fue escrita por ${letter.author}. Solo quien la escribió puede editarla o archivarla.`}
                       >
                         <Heart size={11} fill="currentColor" /> De {letter.author}
                       </span>
@@ -1195,7 +1213,7 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
                     name="author"
                     value={formAuthor}
                     onChange={event => setFormAuthor(event.target.value as StudioAuthor)}
-                    disabled={!!currentUserAuthor}
+                    disabled={!!editingLetter || !!currentUserAuthor}
                   >
                     <option value="Ale">Ale {currentUserAuthor === 'Ale' ? '(Tú)' : ''}</option>
                     <option value="Val">Val {currentUserAuthor === 'Val' ? '(Tú)' : ''}</option>
@@ -1283,7 +1301,7 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
                     />
                   </label>
                   <p style={{ fontSize: '12px', color: 'var(--studio-muted)', margin: 0 }}>
-                    🔒 La carta permanecerá sellada con un candado y un contador regresivo hasta esta fecha y hora.
+                    La interfaz la abrirá en esta fecha, en la zona horaria de este dispositivo. Es una sorpresa visual: ambas cuentas autorizadas ya pueden leer el documento guardado.
                   </p>
                 </div>
               )}
@@ -1684,6 +1702,8 @@ function LettersContent({ namespace, session }: { namespace: string; session?: G
       {letterToDelete && (
         <ConfirmDeleteDialog
           title={letterToDelete.title}
+          busy={sync.busy}
+          error={sync.error || error}
           onClose={() => setLetterToDelete(null)}
           onConfirm={() => handleDeleteLetter(letterToDelete)}
         />

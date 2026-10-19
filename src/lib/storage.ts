@@ -1,6 +1,16 @@
 import { useCallback, useState } from 'react';
 export function readLocal<T>(key: string, fallback: T): T { try { const raw = localStorage.getItem(key); return raw === null ? fallback : JSON.parse(raw) as T; } catch { return fallback; } }
-export function writeLocal<T>(key: string, value: T): boolean { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; } }
+export function writeLocal<T>(key: string, value: T): boolean {
+  try {
+    const serialized = JSON.stringify(value), before = localStorage.getItem(key);
+    if (before === serialized) return true;
+    // Retain previous song/date/color settings that used to exist only in metadata.
+    if (before !== null && /:(letters|music):meta:v[0-9]+$/.test(key)) {
+      localStorage.setItem(key + ':preserved:' + Date.now() + ':' + crypto.randomUUID(), JSON.stringify({ savedAt: new Date().toISOString(), raw: before }));
+    }
+    localStorage.setItem(key, serialized); return true;
+  } catch { return false; }
+}
 export function useLocalState<T>(key: string, initial: T): [T, (value: T | ((previous: T) => T)) => void, boolean] {
   const [state, setState] = useState<T>(() => readLocal(key, initial));
   const [saved, setSaved] = useState(true);

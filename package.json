@@ -7,7 +7,7 @@
   },
   "scripts": {
     "install:ci": "node scripts/install-ci.mjs",
-    "dev": "node scripts/run-framework.mjs dev",
+    "dev": "next dev --port 5173",
     "build": "next build && node scripts/generate-sw.mjs",
     "start": "next start",
     "test": "node --import tsx --test tests/*.test.ts src/lib/gallery.test.ts server/security.test.mjs"

@@ -57,10 +57,10 @@ export const GAME_LEVELS: Record<GameType, GameLevelDef[]> = {
     { level: 5, title: 'Nivel 5', subtitle: '24 cartas', requirement: 'Encuentra las 12 parejas', badge: '12 parejas', memoryPairs: 12 },
   ],
   diamond: [
-    { level: 1, title: 'Nivel 1', subtitle: 'Lienzo estándar', requirement: 'Coloca tus primeras piedritas', badge: 'Lienzo 1', diamondDensity: 'standard' },
+    { level: 1, title: 'Nivel 1', subtitle: 'Lienzo estándar', requirement: 'Completa al menos el 25% del cuadro', badge: 'Lienzo 1', diamondDensity: 'standard' },
     { level: 2, title: 'Nivel 2', subtitle: 'Lienzo estándar', requirement: 'Completa al menos el 75% del cuadro', badge: '75%', diamondDensity: 'standard' },
     { level: 3, title: 'Nivel 3', subtitle: 'Lienzo estándar', requirement: 'Termina el cuadro al 100%', badge: '100%', diamondDensity: 'standard' },
-    { level: 4, title: 'Nivel 4', subtitle: 'Lienzo HD', requirement: 'Llena el lienzo HD con precisión', badge: 'HD', diamondDensity: 'hd' },
+    { level: 4, title: 'Nivel 4', subtitle: 'Lienzo HD', requirement: 'Completa al menos el 75% del lienzo HD', badge: 'HD', diamondDensity: 'hd' },
     { level: 5, title: 'Nivel 5', subtitle: 'Lienzo HD', requirement: 'Cuadro en alta definición al 100%', badge: 'HD 100%', diamondDensity: 'hd' },
   ],
 };
@@ -206,24 +206,15 @@ export function recordLevelCompletion(
   score: number,
   metricLabel: string
 ): GameProgressionStore {
+  if (!Number.isInteger(level) || level < 1 || level > 5 || ![1, 2, 3].includes(stars) || !Number.isInteger(score) || score < 0 || score > 10000 || metricLabel.length > 120) return store;
   const player = store[playerId];
   const progress = player[game];
   const existing = progress.levels[level];
 
-  const bestStars = existing ? (Math.max(existing.stars, stars) as 1 | 2 | 3) : stars;
-  const bestScore = existing ? Math.max(existing.score, score) : score;
-
-  const nextUnlocked = stars >= 1 ? Math.min(5, Math.max(progress.unlockedLevel, level + 1)) : progress.unlockedLevel;
-
+  const nextUnlocked = Math.min(5, Math.max(progress.unlockedLevel, level + 1));
   const updatedLevels: Record<number, LevelRecord> = {
     ...progress.levels,
-    [level]: {
-      level,
-      stars: bestStars,
-      score: bestScore,
-      completedAt: new Date().toISOString(),
-      bestMetricLabel: existing && existing.score > score ? existing.bestMetricLabel : metricLabel,
-    },
+    [level]: mergeLevelRecords(existing, { level, stars, score, completedAt: new Date().toISOString(), bestMetricLabel: metricLabel }),
   };
 
   const totalScore = Object.values(updatedLevels).reduce((sum, r) => sum + r.score, 0);
@@ -315,30 +306,47 @@ export function identifyGooglePlayer(
   return null;
 }
 
-export function mergePlayerGameProgress(a: PlayerGameProgress, b: PlayerGameProgress): PlayerGameProgress {
-  const unlockedLevel = Math.max(a?.unlockedLevel ?? 1, b?.unlockedLevel ?? 1);
-  const aLevels = a?.levels ?? {};
-  const bLevels = b?.levels ?? {};
-  const allLevels = new Set([...Object.keys(aLevels), ...Object.keys(bLevels)].map(Number));
-  const levels: Record<number, LevelRecord> = {};
-
-  for (const lvl of allLevels) {
-    const recA = aLevels[lvl];
-    const recB = bLevels[lvl];
-    if (recA && recB) {
-      levels[lvl] = recA.score >= recB.score ? recA : recB;
-    } else {
-      levels[lvl] = (recA || recB)!;
-    }
-  }
-
-  const totalScore = Object.values(levels).reduce((sum, r) => sum + r.score, 0);
-  const totalStars = Object.values(levels).reduce((sum, r) => sum + r.stars, 0);
-
-  return { unlockedLevel, levels, totalScore, totalStars };
+/** Only known Firebase UIDs establish who may publish a score. Names remain presentation only. */
+export function playerForUid(uid: string | undefined): PlayerId | null {
+  if (uid && KNOWN_VALERIA_UIDS.includes(uid)) return 'valeria';
+  if (uid && KNOWN_ALE_UIDS.includes(uid)) return 'ale';
+  return null;
 }
 
-export function mergePlayerData(a: PlayerData, b: PlayerData): PlayerData {
+export function validLevelRecord(value: unknown): value is LevelRecord {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as LevelRecord;
+  return Number.isInteger(record.level) && record.level >= 1 && record.level <= 5 &&
+    [1, 2, 3].includes(record.stars) && Number.isInteger(record.score) && record.score >= 0 && record.score <= 10000 &&
+    typeof record.bestMetricLabel === 'string' && record.bestMetricLabel.length <= 120 &&
+    typeof record.completedAt === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(record.completedAt) &&
+    Number.isFinite(Date.parse(record.completedAt)) && new Date(record.completedAt).toISOString() === record.completedAt;
+}
+
+/** Scores and stars are independent records; a higher score must never discard earned stars. */
+export function mergeLevelRecords(a: LevelRecord | undefined, b: LevelRecord): LevelRecord {
+  if (!a) return { ...b };
+  const best = b.score > a.score || (b.score === a.score && b.completedAt < a.completedAt) ? b : a;
+  return { ...best, stars: Math.max(a.stars, b.stars) as 1 | 2 | 3, score: Math.max(a.score, b.score) };
+}
+
+export function mergePlayerGameProgress(a?: PlayerGameProgress, b?: PlayerGameProgress): PlayerGameProgress {
+  const levels: Record<number, LevelRecord> = {};
+  for (const source of [a, b]) {
+    for (const [key, record] of Object.entries(source?.levels ?? {})) {
+      if (validLevelRecord(record) && Number(key) === record.level) levels[record.level] = mergeLevelRecords(levels[record.level], record);
+    }
+  }
+  const unlocked = [a?.unlockedLevel, b?.unlockedLevel].filter((value): value is number => Number.isInteger(value) && value! >= 1 && value! <= 5);
+  const unlockedLevel = Math.min(5, Math.max(1, ...unlocked, ...Object.values(levels).map(record => record.level + 1)));
+  return {
+    unlockedLevel, levels,
+    totalScore: Object.values(levels).reduce((sum, record) => sum + record.score, 0),
+    totalStars: Object.values(levels).reduce((sum, record) => sum + record.stars, 0),
+  };
+}
+
+export function mergePlayerData(a?: PlayerData, b?: PlayerData): PlayerData {
   return {
     puzzle: mergePlayerGameProgress(a?.puzzle, b?.puzzle),
     memory: mergePlayerGameProgress(a?.memory, b?.memory),
@@ -346,10 +354,30 @@ export function mergePlayerData(a: PlayerData, b: PlayerData): PlayerData {
   };
 }
 
-export function mergeProgressionStores(base: GameProgressionStore, incoming: GameProgressionStore): GameProgressionStore {
+export function mergeProgressionStores(base?: GameProgressionStore, incoming?: GameProgressionStore | null): GameProgressionStore {
   return {
-    activePlayer: incoming?.activePlayer || base?.activePlayer || 'valeria',
-    valeria: mergePlayerData(base.valeria, incoming.valeria),
-    ale: mergePlayerData(base.ale, incoming.ale),
+    activePlayer: incoming?.activePlayer === 'ale' || incoming?.activePlayer === 'valeria' ? incoming.activePlayer : base?.activePlayer ?? 'valeria',
+    valeria: mergePlayerData(base?.valeria, incoming?.valeria),
+    ale: mergePlayerData(base?.ale, incoming?.ale),
   };
+}
+
+/** Strictly follows the objective printed on each level. Finishing over the limit permits a retry, not an unlock. */
+export function meetsLevelObjective(game: GameType, level: number, metric: number): boolean {
+  if (!Number.isFinite(metric) || metric < 0 || !Number.isInteger(level) || level < 1 || level > 5) return false;
+  if (game === 'puzzle') return Number.isInteger(metric) && (level === 2 ? metric < 20 : level === 4 ? metric < 40 : true);
+  if (game === 'memory') return Number.isInteger(metric) && (level === 2 ? metric < 16 : level === 3 ? metric < 22 : level === 4 ? metric < 28 : true);
+  const target = level === 1 ? .25 : level === 2 || level === 4 ? .75 : 1;
+  return metric <= 1 && metric >= target;
+}
+
+export function puzzleLevelKey(namespace: string, photoId: string, level: number, size: number): string {
+  return `${namespace}:puzzle:v2:${photoId}:level-${level}:${size}`;
+}
+export function diamondLevelKey(namespace: string, photoId: string, level: number, fingerprint: string): string {
+  return `${namespace}:diamond:v2:${photoId}:level-${level}:${fingerprint}`;
+}
+/** A legacy board belongs to one baseline level only. Its raw key is never removed or rewritten. */
+export function ownsLegacyBoard(game: 'puzzle' | 'diamond', level: number, sizeOrDensity: number | 'standard' | 'hd'): boolean {
+  return game === 'puzzle' ? level === (sizeOrDensity === 5 ? 5 : sizeOrDensity === 4 ? 3 : 1) : level === (sizeOrDensity === 'hd' ? 4 : 1);
 }

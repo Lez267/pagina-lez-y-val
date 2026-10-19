@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Timestamp } from 'firebase/firestore';
-import { assertIdempotentStudioCreate, assertStudioIdentity, connectedStudioUid, localStudioRecords, mergeStudioRecords, parseSharedStudio, prepareStudioDraft, prependStudioLocal, sharedDraftId, spotifyLink, studioError, toggleStudioLocalPlan, validateStudioDraft, validPlanDate, type StudioLetter, type StudioPlan, type StudioSong } from '../src/data/studio-sync';
+import { appleMusicLink, assertStudioEditCurrent, assertIdempotentStudioCreate, assertStudioIdentity, connectedStudioUid, localStudioRecords, mergeStudioRecords, parseSharedStudio, prepareStudioDraft, prependStudioLocal, reviseStudioLocal, sameStudioValue, studioMusicLink, sharedDraftId, spotifyLink, studioError, toggleStudioLocalPlan, validateStudioDraft, validPlanDate, type StudioLetter, type StudioPlan, type StudioSong } from '../src/data/studio-sync';
 
 const namespace = 'nh:user:synthetic-ale';
 const letter: StudioLetter = { id: 'dcfe9576-546d-4d7c-9d9e-b891ed153f1c', title: 'Una carta', body: '<img src=x onerror="alert(1)">', author: 'Ale', tag: 'Para hoy', occasion: '', createdAt: '2026-10-17T12:34:56.000Z' };
@@ -67,9 +67,10 @@ test('plan dates reject calendar rollover and legacy author is explicitly select
   assert.equal(legacy.author, undefined);
 });
 
-test('shared records require exact metadata, server timestamps and matching document IDs', () => {
+test('shared records validate identity and server timestamps while retaining unknown historical metadata', () => {
   assert.equal(parseSharedStudio('letters', letter.id, { ...letter, ...metadata }).savedAt, metadata.savedAt);
-  for (const bad of [{ ...letter, ...metadata, id: plan.id }, { ...letter, ...metadata, schemaVersion: 2 }, { ...letter, ...metadata, savedAt: new Date() }, { ...letter, ...metadata, role: 'admin' }, { ...letter, ...metadata, updatedAt: metadata.savedAt }]) assert.throws(() => parseSharedStudio('letters', letter.id, bad));
+  for (const bad of [{ ...letter, ...metadata, id: plan.id }, { ...letter, ...metadata, schemaVersion: 2 }, { ...letter, ...metadata, savedAt: new Date() }]) assert.throws(() => parseSharedStudio('letters', letter.id, bad));
+  assert.equal((parseSharedStudio('letters', letter.id, { ...letter, ...metadata, oldExtra: { keep: true }, updatedAt: metadata.savedAt }) as unknown as { oldExtra: { keep: boolean } }).oldExtra.keep, true);
   assert.throws(() => parseSharedStudio('plans', plan.id, { ...plan, ...metadata, updatedAt: 'client time' }));
 });
 
@@ -126,4 +127,46 @@ test('permission and connectivity errors report no false success or raw backend 
   assert.match(studioError({ code: 'permission-denied', message: 'private backend content' }), /borrador sigue aquí/);
   assert.doesNotMatch(studioError({ code: 'permission-denied', message: 'private backend content' }), /private backend/);
   assert.match(studioError({ code: 'unavailable' }), /No pudimos confirmar/);
+});
+
+
+test('letter scheduling, theme and real recording metadata are shared without undefined Firebase values', async () => {
+  const prepared = await prepareStudioDraft(namespace, 'letters', { ...letter, color: 'gold', unlockAt: '2026-12-25T02:30:00.000Z', song: { id: 'apple-id', title: 'Nuestro tema', artist: 'Artista', previewUrl: 'https://audio-ssl.itunes.apple.com/clip.m4a', artworkUrl: undefined, startSeconds: 12 } });
+  assert.equal(prepared.color, 'gold'); assert.equal(prepared.unlockAt, '2026-12-25T02:30:00.000Z');
+  assert.equal(prepared.song?.startSeconds, 12); assert.equal(Object.hasOwn(prepared.song!, 'artworkUrl'), false);
+  assert.throws(() => validateStudioDraft('letters', { ...letter, song: { title: 'Tema', artist: 'Artista', previewUrl: 'javascript:alert(1)' } }));
+  assert.throws(() => validateStudioDraft('letters', { ...letter, unlockAt: '2026-02-30T02:30:00.000Z' }));
+});
+
+test('Apple catalog links keep their provider and cannot become fabricated Spotify IDs', () => {
+  const actual = 'https://music.apple.com/mx/album/una-cancion/123456?i=987654';
+  const apple = appleMusicLink(actual); assert.equal(apple?.url, actual); assert.equal(apple?.provider, 'apple');
+  assert.equal(spotifyLink(actual), null);
+  assert.deepEqual(studioMusicLink(song.url), { url: song.url, kind: 'track', provider: 'spotify' });
+  assert.doesNotThrow(() => validateStudioDraft('songs', { ...song, ...apple }));
+  for (const bad of ['https://music.apple.com.evil.test/mx/song/12', 'https://user:password@music.apple.com/mx/song/12', 'http://music.apple.com/mx/song/12']) assert.equal(appleMusicLink(bad), null);
+});
+
+test('stale shared edits are rejected instead of overwriting a partner update', () => {
+  const first = parseSharedStudio('plans', plan.id, { ...plan, ...metadata });
+  assert.doesNotThrow(() => assertStudioEditCurrent('plans', first, first));
+  const next = parseSharedStudio('plans', plan.id, { ...plan, ...metadata, done: true, updatedAt: metadata.savedAt, revisionId: letter.id });
+  assert.throws(() => assertStudioEditCurrent('plans', next, first), /otro dispositivo/);
+  assert.equal(first.done, false); assert.equal(next.done, true);
+  const remoteLetter = parseSharedStudio('letters', letter.id, { ...letter, ...metadata, song: { title: 'Tema', artist: 'Artista' } });
+  assert.doesNotThrow(() => assertStudioEditCurrent('letters', remoteLetter, { ...remoteLetter, song: { artist: 'Artista', title: 'Tema' } }));
+  assert.equal(sameStudioValue({ b: 2, a: 1 }, { a: 1, b: 2 }), true);
+});
+
+test('local editing and archival retain originals, previous revisions and unknown records', () => {
+  const raw = [{ future: 'keep' }, { ...letter, unknown: { precious: true } }];
+  const updated = reviseStudioLocal(raw, letter.id, { body: 'Nueva versión', song: undefined }) as any[];
+  assert.equal(updated[0], raw[0]); assert.equal((raw[1] as StudioLetter).body, letter.body);
+  assert.equal(updated[1].body, 'Nueva versión'); assert.equal(updated[1].localRevisions[0].before.body, letter.body);
+  assert.deepEqual(updated[1].unknown, { precious: true });
+  const archived = reviseStudioLocal(updated, letter.id, { archived: true }) as any[];
+  assert.equal(archived.length, raw.length); assert.equal(archived[1].body, 'Nueva versión'); assert.equal(archived[1].localRevisions.length, 2);
+  const restored = reviseStudioLocal(archived, letter.id, { archived: false }) as any[];
+  assert.equal(restored[1].archived, false); assert.equal(restored[1].localRevisions.length, 3);
+  assert.throws(() => reviseStudioLocal(raw, 'not-found', { title: 'Overwrite' }));
 });

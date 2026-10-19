@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { connectedStudioUid, createStudioRecord, localStudioRecords, mergeStudioRecords, prepareStudioDraft, setSharedPlanDone, sharedDraftId, studioError, updateSharedPlan, watchStudio, type SharedStudio, type StudioAuthor, type StudioCollection, type StudioPlan, type StudioRecords } from '../data/studio-sync';
+import { archiveSharedStudio, connectedStudioUid, createStudioRecord, localStudioRecords, mergeStudioRecords, prepareStudioDraft, setSharedPlanDone, sharedDraftId, studioError, updateSharedPlan, updateSharedStudio, watchStudio, type SharedStudio, type StudioAuthor, type StudioCollection, type StudioPlan, type StudioRecords } from '../data/studio-sync';
 
 export function useStudioSync<K extends StudioCollection>(namespace: string, kind: K, rawLocal: unknown) {
   const connected = connectedStudioUid(namespace) !== null;
@@ -24,8 +24,8 @@ export function useStudioSync<K extends StudioCollection>(namespace: string, kin
     return watchStudio(namespace, kind, (records, cached) => {
       setRemote(records); setState(cached ? 'cached' : 'ready'); setError('');
       // Acknowledgements bridge the interval between commit and the next snapshot.
-      setAcknowledged(previous => previous.filter(item => !records.some(record => record.id === item.id)));
-    }, message => { setError(message); setState('error'); setRemote([]); setAcknowledged([]); });
+      setAcknowledged(previous => previous.filter(item => !records.some(record => record.id === item.id && (record.revisionId === item.revisionId || (record.updatedAt ?? record.savedAt).toMillis() >= (item.updatedAt ?? item.savedAt).toMillis()))));
+    }, message => { setError(message); setState('error'); });
   }, [connected, kind, namespace]);
   const shared = useMemo(() => [...remote.filter(item => !acknowledged.some(ack => ack.id === item.id)), ...acknowledged], [remote, acknowledged]);
   // Wait for legacy ID mapping before merging to avoid showing a draft twice.
@@ -47,11 +47,17 @@ export function useStudioSync<K extends StudioCollection>(namespace: string, kin
   }
   function togglePlan(item: StudioPlan) {
     if (kind !== 'plans') return Promise.resolve(false);
-    return perform(async () => await setSharedPlanDone(namespace, item.id, !item.done) as unknown as SharedStudio<StudioRecords[K]>);
+    return perform(async () => await setSharedPlanDone(namespace, item, !item.done) as unknown as SharedStudio<StudioRecords[K]>);
   }
-  function updatePlan(item: StudioPlan) {
+  function updatePlan(expected: StudioPlan, item: StudioPlan) {
     if (kind !== 'plans') return Promise.resolve(false);
-    return perform(async () => await updateSharedPlan(namespace, item) as unknown as SharedStudio<StudioRecords[K]>);
+    return perform(async () => await updateSharedPlan(namespace, expected, item) as unknown as SharedStudio<StudioRecords[K]>);
   }
-  return { connected, rows, state, error, busy, share, togglePlan, updatePlan, clearError: () => setError(''), exportData: { version: 2, local: rawLocal, shared, view: rows, synchronization: state } };
+  function update(expected: StudioRecords[K], item: StudioRecords[K]) {
+    return perform(() => updateSharedStudio(namespace, kind, expected, item));
+  }
+  function archive(item: StudioRecords[K], archived = true) {
+    return perform(() => archiveSharedStudio(namespace, kind, item, archived));
+  }
+  return { connected, rows, state, error, busy, share, togglePlan, updatePlan, update, archive, clearError: () => setError(''), exportData: { version: 2, local: rawLocal, shared, view: rows, synchronization: state } };
 }

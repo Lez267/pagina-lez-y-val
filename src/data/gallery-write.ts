@@ -63,6 +63,7 @@ export function getCurrentFavoriteKeys(): string[] {
 type MetadataPatch = {
   title: string; description: string; photoDate: string; location: string; tags: string[];
   album: string; coverMediaId: string;
+  coverMediaIndex?: number;
   reminder?: { enabled: boolean; date: string; label: string; repeat: 'once' | 'yearly' };
 };
 
@@ -87,6 +88,24 @@ export function buildGalleryMetadataPatch(id: string, original: unknown, changes
   const cover = changes.coverMediaId ?? current.coverMediaId ?? current.media[0]?.id ?? '';
   if (typeof cover !== 'string' || cover.length > 180 || (current.media.length ? !current.media.some(item => item.id === cover) : cover !== '')) throw new Error('Elige una portada que pertenezca a este recuerdo.');
   const patch: MetadataPatch = { title: changes.title.trim(), description: changes.description, photoDate: changes.date, location: changes.location.trim(), tags: changes.tags.map(tag => tag.trim()), album: changes.album.trim(), coverMediaId: cover };
+  const record = original !== null && typeof original === 'object' && !Array.isArray(original) ? original as Record<string, unknown> : {};
+  // An exact raw-array index lets Rules validate a legacy cover in constant time.
+  // The original media array and its IDs are never rewritten.
+  if (record.schemaVersion !== 2 && Array.isArray(record.media) && cover) {
+    const selected = current.media.find(item => item.id === cover);
+    const matchesUrl = (item: Record<string, unknown>) => {
+      try { return typeof item.url === 'string' && new URL(item.url.trim()).href === selected?.url; }
+      catch { return false; }
+    };
+    let index = record.media.findIndex(item => item !== null && typeof item === 'object' && !Array.isArray(item) && item.id === cover && matchesUrl(item));
+    if (index < 0 && cover.startsWith(`${id}-media-`)) {
+      const ordinal = Number(cover.slice(`${id}-media-`.length));
+      const candidate = record.media[ordinal - 1];
+      if (Number.isSafeInteger(ordinal) && ordinal > 0 && candidate !== null && typeof candidate === 'object' && !Array.isArray(candidate) && !('id' in candidate) && matchesUrl(candidate)) index = ordinal - 1;
+    }
+    if (index >= 0) patch.coverMediaIndex = index;
+    else if ('coverMediaIndex' in record) throw new Error('No se pudo comprobar la portada original. Tus archivos no se modificaron.');
+  }
   if (changes.reminder !== undefined) {
     const reminder = changes.reminder;
     if (!reminder || typeof reminder.enabled !== 'boolean' || typeof reminder.date !== 'string' || reminder.date.length > 10 || typeof reminder.label !== 'string' || reminder.label.length > 120 || !['once', 'yearly'].includes(reminder.repeat) || (reminder.date && !validGalleryDate(reminder.date)) || (reminder.enabled && (!reminder.date || !reminder.label.trim()))) throw new Error('El recordatorio necesita una fecha y un nombre válidos.');

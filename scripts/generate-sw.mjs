@@ -2,33 +2,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 
-const candidate = ['dist/client', 'dist', 'public'].find(d => fs.existsSync(d)) ?? 'public';
-const root = path.resolve(candidate);
-if (!fs.existsSync(root)) {
-  fs.mkdirSync(root, { recursive: true });
-}
-
-const files = ['/'];
-function collect(directory) {
+const entries = new Map();
+function collect(directory, prefix) {
   if (!fs.existsSync(directory)) return;
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
     const full = path.join(directory, entry.name);
+    const url = `${prefix}/${entry.name}`;
     if (entry.isDirectory()) {
-      if (!entry.name.startsWith('.') && entry.name !== 'node_modules') collect(full);
-    } else if (/\.(?:js|css|woff2?|png|jpe?g|webp|svg|ico|webmanifest)$/.test(entry.name) && entry.name !== 'sw.js') {
-      files.push('/' + path.relative(root, full).split(path.sep).join('/'));
+      if (!entry.name.startsWith('.') && entry.name !== 'node_modules') collect(full, url);
+    } else if (/\.(?:js|css|woff2?|png|jpe?g|webp|svg|ico|webmanifest|html)$/.test(entry.name) && entry.name !== 'sw.js') {
+      entries.set(url, full);
     }
   }
 }
-collect(root);
-
-const revision = crypto.createHash('sha256').update(files.map(file => {
-  try {
-    return file + (file === '/' ? '' : fs.readFileSync(path.join(root, file)));
-  } catch {
-    return file;
-  }
-}).join('\n')).digest('hex').slice(0,12);
+// Use this Next build even when an older Vinext dist/ remains in the checkout.
+collect('public', '');
+collect('.next/static', '/_next/static');
+if (!fs.existsSync('.next/BUILD_ID')) throw new Error('Compile Next before generating the service worker.');
+const hash = crypto.createHash('sha256').update(fs.readFileSync('.next/BUILD_ID'));
+for (const [url, file] of [...entries].sort(([a], [b]) => a.localeCompare(b))) hash.update(url).update(fs.readFileSync(file));
+const revision = hash.digest('hex').slice(0,16);
+const files = [...entries.keys()].sort();
 
 const source = `const CACHE='nh-static-${revision}';
 const ASSETS=${JSON.stringify(files)};
@@ -37,16 +31,11 @@ self.addEventListener('activate',event=>{event.waitUntil(caches.keys().then(keys
 self.addEventListener('fetch',event=>{
  const request=event.request;const url=new URL(request.url);
  if(request.method!=='GET'||url.origin!==self.location.origin)return;
- if(request.mode==='navigate'){event.respondWith(fetch(request).catch(()=>caches.match('/')));return;}
+ if(request.mode==='navigate'){event.respondWith(fetch(request).catch(()=>caches.match('/offline.html')));return;}
  if(!ASSETS.includes(url.pathname)||url.search)return;
  event.respondWith(caches.match(request).then(cached=>cached||fetch(request)));
 });
 `;
 
-if (fs.existsSync(root)) {
-  fs.writeFileSync(path.join(root,'sw.js'),source);
-}
-if (fs.existsSync('public') && root !== path.resolve('public')) {
-  fs.writeFileSync(path.join('public', 'sw.js'), source);
-}
-console.log('PWA: cached static interface and example images only; no gallery records or remote photos.');
+fs.writeFileSync('public/sw.js', source);
+console.log(`PWA: ${files.length} current static assets; no private records, API, remote photos or audio.`);

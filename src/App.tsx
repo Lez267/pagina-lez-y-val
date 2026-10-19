@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownToLine, ArrowRight, CalendarHeart, Check, ChevronRight, Film, Flower2, Heart, House, Image as ImageIcon, LoaderCircle, LockKeyhole, LogOut, Mail, Menu, Music2, Puzzle, ShieldCheck, Sparkles, Sprout, Upload, X } from 'lucide-react';
 import type { GallerySession, Memory, Page } from './data/types';
-import { demoMemories, RELATIONSHIP_START } from './data/demo';
+import { RELATIONSHIP_START } from './data/demo';
 import { normalizeImport } from './data/normalizer';
 import { daysSince, dateLabel } from './lib/dates';
-import { downloadJson, readLocal, writeLocal } from './lib/storage';
+import { downloadJson } from './lib/storage';
 import { importIdentity } from './lib/import-identity';
 import { Botanical, FlowerMark } from './components/Botanical';
 import { Dialog } from './components/Dialog';
@@ -211,7 +211,8 @@ export default function App() {
   const [connectOpen, setConnectOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [session, setSession] = useState<GallerySession | null>(() => readLocal<GallerySession | null>('nh:auth:session:v1', null));
+  const [session, setSession] = useState<GallerySession | null>(null);
+  const [restoring, setRestoring] = useState(true);
   const [imported, setImported] = useState<Memory[] | null>(null);
   const [importName, setImportName] = useState('');
   const [importNamespace, setImportNamespace] = useState('');
@@ -220,30 +221,21 @@ export default function App() {
   const operation = useRef(0);
   const operationKind = useRef<'google' | 'import' | null>(null);
 
-  const memories = session?.memories ?? imported ?? demoMemories;
-  const example = !session && imported === null;
-  const namespace = session ? `nh:user:${session.uid}` : imported ? importNamespace : 'nh:demo';
-
-  // Guardar sesión en almacenamiento local para que se mantenga abierta permanentemente
-  useEffect(() => {
-    if (session) {
-      writeLocal('nh:auth:session:v1', session);
-    } else {
-      try { localStorage.removeItem('nh:auth:session:v1'); } catch {}
-    }
-  }, [session]);
+  const memories = imported ?? session?.memories ?? [];
+  const example = false;
+  const namespace = imported ? importNamespace : session ? `nh:user:${session.uid}` : 'nh:locked';
 
   // Verificar y sincronizar sesión en segundo plano desde Firebase
   useEffect(() => {
     let disposed = false;
+    const attempt = operation.current;
     void import('./data/firebase').then(api => {
       if (disposed) return;
-      return api.restoreSavedSession?.()?.then(restored => {
-        if (!disposed && restored) {
-          setSession(restored);
-        }
+      return api.restoreSavedSession().then(restored => {
+        if (!disposed && attempt === operation.current) setSession(restored);
       });
-    }).catch(() => undefined);
+    }).catch(() => { if (!disposed && attempt === operation.current) setSession(null); })
+      .finally(() => { if (!disposed) setRestoring(false); });
     return () => { disposed = true; };
   }, []);
 
@@ -273,10 +265,18 @@ export default function App() {
       if (disposed) return;
       try {
         stop = api.watchCurrentMemories(
-          next => { if (!disposed) setSession(current => current?.uid === uid ? { ...current, memories: next } : current); }
+          next => { if (!disposed) setSession(current => current?.uid === uid ? { ...current, memories: next } : current); },
+          () => {
+            if (disposed) return;
+            ++operation.current;
+            setSession(null);
+            setImported(null);
+            setError('Tu sesión necesita verificarse de nuevo. Entra con Google para continuar.');
+          },
+          uid
         );
       } catch {
-        // Ignorar si Firebase no está listo o en modo local
+        if (!disposed) { setSession(null); setImported(null); }
       }
     }).catch(() => undefined);
     return () => { disposed = true; stop?.(); };
@@ -320,6 +320,12 @@ export default function App() {
   };
 
   const disconnect = async () => {
+    ++operation.current;
+    operationKind.current = null;
+    setSession(null);
+    setImported(null);
+    setLoading(false);
+    setRestoring(false);
     try {
       const { disconnectGallery } = await import('./data/firebase');
       await disconnectGallery();
@@ -335,7 +341,7 @@ export default function App() {
   };
 
   const importFile = async (file?: File) => {
-    if (!file || loading) return;
+    if (!file || loading || !session) return;
     const attempt = ++operation.current;
     operationKind.current = 'import';
     setLoading(true);
@@ -347,12 +353,6 @@ export default function App() {
       if (!records.length) throw new Error('No encontramos recuerdos en ese archivo. Elige el JSON de tu galería.');
       const fingerprint = await importIdentity(records);
       if (attempt !== operation.current) return;
-      if (session) {
-        const { disconnectGallery } = await import('./data/firebase');
-        await disconnectGallery();
-      }
-      if (attempt !== operation.current) return;
-      setSession(null);
       setImported(records);
       setImportNamespace(fingerprint);
       setImportName(file.name);
@@ -366,15 +366,14 @@ export default function App() {
     }
   };
 
-  if (!session && !imported) {
+  if (!session) {
     return (
       <LoginPage
         onLogin={connect}
-        loading={loading}
+        loading={loading || restoring}
         error={error}
         magic={magic}
         setMagic={setMagic}
-        onImportFile={importFile}
       />
     );
   }
@@ -505,7 +504,7 @@ export default function App() {
       <div className="app-body">
         <main id="main-content" tabIndex={-1} className={`main-content page-${page}`} key={namespace}>
           {page === 'home' && <HomePage memories={memories} navigate={navigate} example={example}/>}
-          {page === 'memories' && <GalleryPage memories={memories} namespace={namespace} connected={!!session} session={session}/>}
+          {page === 'memories' && <GalleryPage memories={memories} namespace={namespace} connected={!!session && !imported} session={session}/>}
           {page === 'timeline' && <TimelinePage memories={memories}/>}
           {page === 'letters' && <LettersPage namespace={namespace} session={session}/>}
           {page === 'music' && <MusicPage namespace={namespace} session={session}/>}
@@ -552,11 +551,22 @@ export default function App() {
           <button className="button button-secondary import-button" onClick={() => fileInput.current?.click()} disabled={loading}>
             <Upload size={16}/> Abrir archivo JSON
           </button>
+          <button type="button" className="button button-secondary" onClick={() => {
+            const entries: Record<string, string> = {};
+            try {
+              for (let index = 0; index < localStorage.length; index++) {
+                const key = localStorage.key(index);
+                if (key?.startsWith(namespace + ':')) entries[key] = localStorage.getItem(key) ?? '';
+              }
+              downloadJson('respaldo-privado-este-dispositivo.json', { format: 'local-device-backup/v1', exportedAt: new Date().toISOString(), entries });
+            } catch { setError('No se pudo leer el almacenamiento de este dispositivo. Los datos se conservan.'); }
+          }}>Descargar borradores y partidas de este dispositivo</button>
           <p className="footnote">El archivo se lee en este navegador. No se envía ni se restaura en Firebase. Las publicaciones que añadan después en la galería anterior no se copian automáticamente aquí.</p>
           {imported && (
             <div className="imported-details">
               <span>{importName} · {imported.length} recuerdos</span>
               <button className="text-link" onClick={() => downloadJson('vista-recuerdos.json', imported)}><ArrowDownToLine size={14}/> Exportar esta vista</button>
+              <button className="text-link" onClick={() => { setImported(null); setConnectOpen(false); }}>Volver a la galería compartida</button>
             </div>
           )}
           <a className="original-gallery-link" href="https://galeria-lezz-y-val.vercel.app/" target="_blank" rel="noopener noreferrer">

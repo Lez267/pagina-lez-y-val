@@ -1,5 +1,29 @@
 import type { MediaItem } from '../data/types';
 
+const canonicalUpload = /^https:\/\/res\.cloudinary\.com\/dc7x4qjzu\/(image|video)\/upload\/v[0-9]{1,20}\/(nuestro-universo\/[0-9a-f]{24}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\.[A-Za-z0-9]{1,8})?$/;
+
+/** The canonical URL contains the media kind and Cloudinary public ID. */
+export function decodePublicationMedia(value: unknown): Omit<MediaItem, 'id'> | null {
+  if (typeof value !== 'string') return null;
+  const match = canonicalUpload.exec(value);
+  return match ? { url: value, type: match[1] as MediaItem['type'], storagePath: match[2] } : null;
+}
+
+/** Compact new records avoid repeating data already encoded by the asset URL.
+ * The display adapter reconstructs the same IDs, types and public IDs on read.
+ */
+export function encodePublicationMedia(memoryId: string, uploaded: readonly MediaItem[], coverIndex: number) {
+  const items = newPublicationMedia(memoryId, uploaded);
+  if (!Number.isInteger(coverIndex) || coverIndex < 0 || coverIndex >= items.length) throw new Error('Elige una portada válida.');
+  for (const item of items) {
+    const decoded = decodePublicationMedia(item.url);
+    if (!decoded || decoded.type !== item.type || decoded.storagePath !== item.storagePath) throw new Error('No se pudo comprobar el archivo que se va a publicar.');
+  }
+  const urls = items.map(item => item.url);
+  if (new Set(urls).size !== urls.length) throw new Error('El mismo archivo aparece más de una vez en esta publicación.');
+  return { schemaVersion: 2 as const, media: urls, coverMediaId: items[coverIndex].id };
+}
+
 /** Construct unique media IDs within a new post without touching asset URLs.
  * Existing publications never pass through this builder.
  */

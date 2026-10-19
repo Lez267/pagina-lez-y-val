@@ -2,7 +2,7 @@ import { collection, doc, runTransaction, serverTimestamp } from 'firebase/fires
 import type { MediaItem } from './types';
 import { requireConnectedGallery } from './firebase';
 import { validateGalleryFiles, validateGalleryMetadata, type GalleryPublication } from '../lib/gallery';
-import { newPublicationMedia, samePublicationValue } from '../lib/publication';
+import { encodePublicationMedia, samePublicationValue } from '../lib/publication';
 
 type SignedUpload = { uploadUrl: string; resourceType: 'image' | 'video'; cloudName: string; apiKey: string; params: Record<string, string>; signature: string };
 const uploadedFiles = new WeakMap<File, { uid: string; media: MediaItem }>();
@@ -52,13 +52,12 @@ export async function publishGalleryMemory(draft: GalleryPublication, onProgress
   if (!pending || pending.uid !== uid) { pending = { uid, id: doc(collection(db, 'memories')).id }; publicationIds.set(first, pending); }
   const uploaded: MediaItem[] = [];
   for (const file of draft.files) { uploaded.push(await uploadFile(file, uid)); onProgress?.(uploaded.length, draft.files.length); }
-  const media = newPublicationMedia(pending.id, uploaded);
+  const encodedMedia = encodePublicationMedia(pending.id, uploaded, draft.coverIndex);
   assertSameUser(uid);
   const details = {
     title: draft.title.trim(), description: draft.description.trim(), photoDate: draft.date,
     location: draft.location.trim(), album: draft.album.trim(), tags: [...draft.tags],
-    author: draft.author.trim(), createdBy: uid, schemaVersion: 1,
-    media, coverMediaId: media[draft.coverIndex].id, favorites: [],
+    author: draft.author.trim(), createdBy: uid, ...encodedMedia, favorites: [],
     ...(draft.reminder?.enabled ? { reminder: { ...draft.reminder } } : {}),
   };
   const reference = doc(db, 'memories', pending.id);

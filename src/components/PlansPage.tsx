@@ -2,7 +2,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { CalendarDays, Check, Circle, Coffee, Compass, Download, Heart, Home, MapPin, Pencil, Plus, Sparkles, Sprout, Trash2 } from 'lucide-react';
 import { downloadJson, useLocalState } from '../lib/storage';
 import { StudioDialog, StudioLocalNote, StudioSprig, StudioStorageNotice, StudioSyncNotice, StudioShareButton, studioIsDemo } from './LettersPage';
-import { planCategories, prependStudioLocal, toggleStudioLocalPlan, validPlanDate, type StudioPlan } from '../data/studio-sync';
+import { planCategories, prependStudioLocal, reviseStudioLocal, validPlanDate, type StudioPlan } from '../data/studio-sync';
 import { useStudioSync } from './useStudioSync';
 import './studio.css';
 
@@ -39,15 +39,18 @@ function PlansContent({ namespace }: { namespace: string }) {
   const demo = studioIsDemo(namespace);
   const [stored, setStored, saved] = useLocalState<unknown>(`${namespace}:plans:v1`, demo ? demoPlans : []);
   const [deletedIds, setDeletedIds] = useLocalState<string[]>(`${namespace}:plans:deleted:v1`, []);
-  const [planOverrides, setPlanOverrides] = useLocalState<Record<string, Partial<Plan>>>(`${namespace}:plans:overrides:v1`, {});
+  const [planOverrides] = useLocalState<Record<string, Partial<Plan>>>(`${namespace}:plans:overrides:v1`, {});
 
   const sync = useStudioSync(namespace, 'plans', stored);
   const rawPlans = sync.rows.map(row => row.item);
 
-  // Aplicar eliminaciones y sobreescrituras locales
-  const activePlans = rawPlans
-    .filter(plan => !deletedIds.includes(plan.id))
-    .map(plan => ({ ...plan, ...(planOverrides[plan.id] || {}) }));
+  const [showArchived, setShowArchived] = useState(false);
+  const isArchived = (plan: Plan) => (plan as Plan & { archived?: boolean }).archived === true || deletedIds.includes(plan.id);
+  // Historic overrides remain in the backup, but never mask later updates from the couple.
+  const activePlans = rawPlans.filter(plan => showArchived === isArchived(plan)).map(plan => {
+    const row = sync.rows.find(row => row.item.id === plan.id);
+    return row?.scope === 'local' && !Array.isArray((plan as Plan & { localRevisions?: unknown }).localRevisions) ? { ...plan, ...(planOverrides[plan.id] || {}) } : plan;
+  });
 
   const identity = useRef<{ id: string; createdAt: string } | null>(null);
   const [error, setError] = useState('');
@@ -68,7 +71,7 @@ function PlansContent({ namespace }: { namespace: string }) {
   const completed = activePlans.filter(plan => plan.done).length;
   const visible = activePlans.filter(plan => filter === 'Todos' || (filter === 'Vividos' ? plan.done : !plan.done));
 
-  const exportPlans = () => downloadJson('nuestra-historia-planes.json', { ...sync.exportData, plans: activePlans });
+  const exportPlans = () => downloadJson('nuestra-historia-planes.json', { ...sync.exportData, plans: rawPlans, historicalLocalOverrides: planOverrides, hiddenLocalIds: deletedIds });
 
   const startCompose = () => {
     identity.current = null;
@@ -95,10 +98,17 @@ function PlansContent({ namespace }: { namespace: string }) {
     setCompose(true);
   };
 
-  function handleDeletePlan(plan: Plan) {
-    setDeletedIds(prev => [...(Array.isArray(prev) ? prev : []), plan.id]);
-    setStored((prev: unknown) => Array.isArray(prev) ? prev.filter((item: any) => item?.id !== plan.id) : prev);
-    setStatus(`Plan «${plan.title}» eliminado.`);
+  async function handleDeletePlan(plan: Plan, archived = true) {
+    const row = sync.rows.find(row => row.item.id === plan.id);
+    if (row?.scope === 'shared') {
+      if (!await sync.archive(plan, archived)) return;
+    } else {
+      try { setStored(reviseStudioLocal(stored, row?.localId ?? plan.id, { archived })); }
+      catch (failure) { setError((failure as Error).message); return; }
+    }
+    // Old local hiding flags are retained until explicitly restored.
+    if (!archived) setDeletedIds(previous => previous.filter(id => id !== plan.id && id !== row?.localId));
+    setStatus(`Plan «${plan.title}» ${archived ? 'archivado; se conserva completo' : 'restaurado'}.`);
     setPlanToDelete(null);
   }
 
@@ -123,21 +133,15 @@ function PlansContent({ namespace }: { namespace: string }) {
         category: formCategory,
         date: formDate,
         note: formNote.trim(),
-        author: formAuthor,
+        author: editingPlan.author,
       };
 
-      setPlanOverrides(prev => ({
-        ...prev,
-        [editingPlan.id]: updatedPlan,
-      }));
-
-      setStored((prev: unknown) =>
-        Array.isArray(prev) ? prev.map((item: any) => item?.id === editingPlan.id ? updatedPlan : item) : prev
-      );
-
       const row = sync.rows.find(item => item.item.id === editingPlan.id);
-      if (row?.scope === 'shared' && sync.connected) {
-        await sync.updatePlan(updatedPlan);
+      if (row?.scope === 'shared') {
+        if (!await sync.updatePlan(editingPlan, updatedPlan)) return;
+      } else {
+        try { setStored(reviseStudioLocal(stored, row?.localId ?? editingPlan.id, updatedPlan as unknown as Record<string, unknown>)); }
+        catch (failure) { setError((failure as Error).message); return; }
       }
 
       setCompose(false);
@@ -179,19 +183,11 @@ function PlansContent({ namespace }: { namespace: string }) {
     const row = sync.rows.find(item => item.item.id === plan.id);
     const newDoneState = !plan.done;
 
-    setPlanOverrides(prev => ({
-      ...prev,
-      [plan.id]: {
-        ...(prev[plan.id] || {}),
-        done: newDoneState,
-      },
-    }));
-
     if (row?.scope === 'shared') {
       if (!await sync.togglePlan(plan)) return;
     } else {
       try {
-        setStored(toggleStudioLocalPlan(stored, plan.id, newDoneState));
+        setStored(reviseStudioLocal(stored, row?.localId ?? plan.id, { done: newDoneState }));
       } catch (failure) {
         setError((failure as Error).message);
         return;
@@ -250,6 +246,7 @@ function PlansContent({ namespace }: { namespace: string }) {
             </button>
           ))}
         </div>
+        <button type="button" className="studio-export" onClick={() => setShowArchived(value => !value)}>{showArchived ? "Ver planes activos" : "Ver archivo"}</button>
         <button type="button" className="studio-export" onClick={exportPlans}>
           <Download size={14} /> Exportar
         </button>
@@ -307,10 +304,10 @@ function PlansContent({ namespace }: { namespace: string }) {
                   <button
                     type="button"
                     className="studio-letter-delete-btn"
-                    onClick={() => setPlanToDelete(plan)}
-                    title="Eliminar plan"
+                    onClick={() => isArchived(plan) ? void handleDeletePlan(plan, false) : setPlanToDelete(plan)}
+                    title={isArchived(plan) ? "Restaurar plan" : "Archivar plan"}
                   >
-                    <Trash2 size={13} /> Borrar
+                    <Trash2 size={13} /> {isArchived(plan) ? "Restaurar" : "Archivar"}
                   </button>
                 </div>
               </div>
@@ -360,6 +357,7 @@ function PlansContent({ namespace }: { namespace: string }) {
                 <select
                   className="input"
                   name="author"
+                  disabled={!!editingPlan}
                   value={formAuthor}
                   onChange={e => setFormAuthor(e.target.value as 'Ale' | 'Val')}
                 >
@@ -459,16 +457,18 @@ function PlansContent({ namespace }: { namespace: string }) {
       {/* Modal Confirmar Eliminar Plan */}
       {planToDelete && (
         <StudioDialog
-          title="¿Eliminar este plan?"
-          subtitle={`«${planToDelete.title}» se borrará de la lista de deseos. Esta acción no se puede deshacer.`}
+          busy={sync.busy}
+          title="¿Archivar este plan?"
+          subtitle={`«${planToDelete.title}» quedará en el archivo. Su contenido y las versiones anteriores se conservan.`}
           onClose={() => setPlanToDelete(null)}
         >
+          {(sync.error || error) && <p className="studio-form-error" role="alert">{sync.error || error}</p>}
           <div className="studio-form-actions" style={{ marginTop: '20px' }}>
             <button type="button" className="button-secondary" onClick={() => setPlanToDelete(null)}>
               Cancelar
             </button>
-            <button type="button" className="button-destructive" onClick={() => handleDeletePlan(planToDelete)}>
-              <Trash2 size={15} /> Eliminar plan
+            <button type="button" className="button-destructive" disabled={sync.busy} onClick={() => handleDeletePlan(planToDelete)}>
+              <Trash2 size={15} /> Archivar plan
             </button>
           </div>
         </StudioDialog>

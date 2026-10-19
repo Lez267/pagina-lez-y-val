@@ -1,0 +1,12 @@
+node_modules/
+.next/
+dist/
+.git/
+.sites/
+.sites-runtime/
+.openai/
+.wrangler/
+work/
+outputs/
+*.patch
+.env*
