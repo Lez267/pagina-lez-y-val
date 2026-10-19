@@ -90,27 +90,31 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
   backIndexRef.current = backIndex;
 
   // Estado para la animación de dispersión inspirada en Gionatan Nese
-  const [isScattered, setIsScattered] = useState(false);
+  // Inicia listo (is-ready) para evitar cualquier parpadeo al abrir la web en móvil
+  const [isScattered, setIsScattered] = useState(true);
   const [isReshuffling, setIsReshuffling] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Parallax interactivo 3D con lerp suave
+  // Parallax interactivo 3D con lerp suave (exclusivo para desktop con ratón)
   const mouseTarget = useRef({ x: 0, y: 0 });
   const mouseCurrent = useRef({ x: 0, y: 0 });
   const animFrameId = useRef<number | null>(null);
 
   useEffect(() => {
-    // Dispersión inicial
-    const timer = setTimeout(() => {
-      setIsScattered(true);
-    }, 220);
+    // En móviles y tablets táctiles, no ejecutar bucle rAF para evitar micro-parpadeos de capas GPU y ahorro de batería
+    const hasHover = typeof window !== 'undefined' && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (!hasHover) return;
 
+    let active = true;
     const loop = () => {
+      if (!active) return;
       const ease = 0.08;
-      mouseCurrent.current.x += (mouseTarget.current.x - mouseCurrent.current.x) * ease;
-      mouseCurrent.current.y += (mouseTarget.current.y - mouseCurrent.current.y) * ease;
+      const dx = mouseTarget.current.x - mouseCurrent.current.x;
+      const dy = mouseTarget.current.y - mouseCurrent.current.y;
+      mouseCurrent.current.x += dx * ease;
+      mouseCurrent.current.y += dy * ease;
 
-      if (containerRef.current) {
+      if (containerRef.current && (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001)) {
         containerRef.current.style.setProperty('--tilt-x', mouseCurrent.current.x.toFixed(4));
         containerRef.current.style.setProperty('--tilt-y', mouseCurrent.current.y.toFixed(4));
       }
@@ -121,12 +125,13 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
     animFrameId.current = requestAnimationFrame(loop);
 
     return () => {
-      clearTimeout(timer);
+      active = false;
       if (animFrameId.current) cancelAnimationFrame(animFrameId.current);
     };
   }, []);
 
   // Intervalo que cambia una imagen a la vez cada 4.5 segundos asegurando SIEMPRE distinta publicación
+
   useEffect(() => {
     if (photoPool.length < 2) return;
 
@@ -189,6 +194,7 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
+    if (typeof window !== 'undefined' && !window.matchMedia('(hover: hover) and (pointer: fine)').matches) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width - 0.5;
     const y = (e.clientY - rect.top) / rect.height - 0.5;
@@ -198,6 +204,9 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
   const handleMouseLeave = useCallback(() => {
     mouseTarget.current = { x: 0, y: 0 };
   }, []);
+
+  const touchStartPos = useRef<{ x: number; y: number } | null>(null);
+  const isTouchDevice = useRef(false);
 
   // Interacción al hacer clic: juntar, barajar fotos y volver a dispersar garantizando publicaciones distintas
   const triggerReshuffle = useCallback(() => {
@@ -224,20 +233,53 @@ export default function HeroPhotoScrapbook({ cover, example, memories }: HeroPho
     }, 280);
   }, [isReshuffling, photoPool]);
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    isTouchDevice.current = true;
+    const t = e.touches[0];
+    if (t) touchStartPos.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!touchStartPos.current) return;
+    const t = e.changedTouches[0];
+    if (t) {
+      const dx = Math.abs(t.clientX - touchStartPos.current.x);
+      const dy = Math.abs(t.clientY - touchStartPos.current.y);
+      // Si el usuario movió el dedo más de 10px, fue un gesto de scroll, NO un tap
+      if (dx > 10 || dy > 10) {
+        touchStartPos.current = null;
+        return;
+      }
+    }
+    touchStartPos.current = null;
+    triggerReshuffle();
+  };
+
+  const handleClick = () => {
+    if (isTouchDevice.current) {
+      isTouchDevice.current = false;
+      return;
+    }
+    triggerReshuffle();
+  };
+
   const frontItem = photoPool[frontIndex] || photoPool[0];
   const backItem = photoPool[backIndex] || photoPool[1] || photoPool[0];
 
   return (
     <div
       ref={containerRef}
-      className={`hero-art hero-art-gn-space ${isScattered ? 'is-scattered' : 'is-stacked'}`}
+      className={`hero-art hero-art-gn-space ${isReshuffling ? (isScattered ? 'is-scattered' : 'is-stacked') : 'is-ready'}`}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      onClick={triggerReshuffle}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onClick={handleClick}
       title="Toca para juntar y barajar nuestras fotos ♡"
       role="region"
       aria-label="Álbum fotográfico de nuestros recuerdos"
     >
+
       {/* Auria y brillos ambientales de fondo */}
       <div className="hero-aura aura-one" />
       <div className="hero-aura aura-two" />

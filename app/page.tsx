@@ -13,5 +13,15 @@ export default function OurUniverse() {
       else { window.addEventListener('load', register, { once: true }); return () => window.removeEventListener('load', register); }
     }
   }, []);
-  return ready ? <App/> : <main className="app-starting" aria-busy="true"><span aria-hidden="true">✳</span><p>Abriendo nuestro pequeño universo…</p></main>;
+  return ready ? (
+    <App/>
+  ) : (
+    <div className="app-shell" aria-busy="true">
+      <main className="app-starting">
+        <span className="app-starting-flower" aria-hidden="true">🌸</span>
+        <p>Abriendo nuestro pequeño universo…</p>
+      </main>
+    </div>
+  );
 }
+
