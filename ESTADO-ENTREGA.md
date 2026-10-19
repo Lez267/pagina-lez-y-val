@@ -10,6 +10,8 @@ Actualizado el **19 de octubre de 2026**. Este documento describe el código loc
 - Las correcciones de esta revisión todavía están en el código local; no se han subido a GitHub desde este trabajo.
 - Las reglas nuevas están preparadas y probadas, pero aún no se han publicado en Firebase. Se deben coordinar con la nueva versión del cliente: publicar primero la web nueva y aplicar inmediatamente las reglas nuevas.
 
+Se integraron los commits recientes de GitHub `5631f52` y `ec3a59f`, conservando las mejoras móviles de estilos, álbum y pantalla de entrada. La comprobación posterior a la integración aprobó nuevamente las 93 pruebas y la compilación de producción.
+
 ## Qué quedó corregido en código
 
 - Entrada obligatoria con Google, sin vista previa privada ni acceso basado solamente en un JSON local. La pérdida de la sesión retira el contenido privado.
